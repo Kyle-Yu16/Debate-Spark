@@ -1,0 +1,34 @@
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
+
+
+Stance = Literal["正方", "反方"]
+
+
+class ProjectCreate(BaseModel):
+    topic: str = Field(min_length=4, max_length=300)
+    stance: Stance = "正方"
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class DebateCreate(BaseModel):
+    project_id: str
+    mode: Literal["human", "arena"] = "human"
+    user_stance: Stance = "正方"
+    difficulty: Literal["陪练", "标准", "赛事"] = "标准"
+    rounds: int = Field(default=6, ge=2, le=16)
+
+
+class TurnCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=6000)
+    stage: str = "自由辩论"
+
+
+class WorkspacePatch(BaseModel):
+    workspace: dict[str, Any]
+
+
+class EvolutionCreate(BaseModel):
+    project_id: str
+    games: int = Field(default=2, ge=2, le=8)
