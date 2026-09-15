@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
-from .agents import arena_speech, demo_workspace, evaluate_debate, normalize_workspace, other, prepare_workspace, propose_skill_revision, short_pause
+from .agents import arena_speech, evaluate_debate, normalize_workspace, other, prepare_workspace, propose_skill_revision, short_pause
 from .database import connect, decode, encode, init_db, new_id, now_iso, row_dict
 from .schemas import DebateCreate, EvolutionCreate, ProjectCreate, TurnCreate, WorkspacePatch
 from .settings import settings
@@ -366,7 +366,14 @@ async def evolution(body: EvolutionCreate):
     champion = champion_record["skill"]
     candidate_id = new_id("skill")
     topics = list(dict.fromkeys([project["topic"], *(topic.strip() for topic in body.topics if topic.strip())]))[:8]
-    workspaces = {topic: project["workspace"] if topic == project["topic"] else demo_workspace(topic, "正方", []) for topic in topics}
+    workspaces = {project["topic"]: project["workspace"]}
+    for topic in topics:
+        if topic == project["topic"]:
+            continue
+        prepared = await prepare_workspace(topic, "正方")
+        if any("模型调用未完成" in str(warning) for warning in prepared.get("warnings", [])):
+            raise HTTPException(503, f"评测辩题《{topic}》备赛失败；降级材料不会用于 Skill 进化")
+        workspaces[topic] = prepared
     experiences = [{
         "source": "产品退化测试",
         "observations": ["重复依赖同一例子会降低新意和回应性", "子概念定义之争可能偷换原命题"],

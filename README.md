@@ -189,6 +189,14 @@ flowchart LR
 
 演示降级内容不会参与晋级。一旦模型或裁判调用失败，进化任务会明确中止，避免把占位发言误当成有效经验。
 
+仓库提供了包含事实辩、政策辩与价值辩的五题基准集。配置模型后可以运行：
+
+```bash
+.venv/bin/python scripts/run_skill_evolution.py --iterations 2 --games 2
+```
+
+最终 Skill 和完整 JSON 评测报告会分别写入 `reports/final_debate_skill.md` 与 `reports/final_debate_skill.json`。
+
 ### “思想火花”如何产生
 
 1. **发散**：从反事实、边界条件、二阶影响等不同视角生成候选角度。
