@@ -16,6 +16,7 @@ class Settings:
     model = os.getenv("LLM_MODEL", "")
     database_path = Path(os.getenv("DATABASE_PATH", str(ROOT / "data" / "spark.db")))
     request_timeout = float(os.getenv("REQUEST_TIMEOUT", "90"))
+    model_retries = max(1, int(os.getenv("MODEL_RETRIES", "3")))
 
     @property
     def demo_mode(self) -> bool:

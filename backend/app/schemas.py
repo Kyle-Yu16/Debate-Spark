@@ -34,3 +34,17 @@ class EvolutionCreate(BaseModel):
     games: int = Field(default=2, ge=2, le=4, description="每个辩题的换边对局数")
     iterations: int = Field(default=1, ge=1, le=4)
     topics: list[str] = Field(default_factory=list, max_length=8)
+    mode: Literal["incremental", "promotion"] = "incremental"
+    max_new_games: int = Field(
+        default=1,
+        ge=0,
+        le=20,
+        description="本次最多新生成的对局总数；历史轨迹复用不计入",
+    )
+    reuse_trajectories: bool = True
+    max_api_requests: int | None = Field(
+        default=None,
+        ge=1,
+        le=500,
+        description="包括重试在内的实际模型 HTTP 请求硬上限",
+    )

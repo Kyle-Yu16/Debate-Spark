@@ -22,5 +22,5 @@ export const api={
   finish:(id:string)=>request<any>(`/debates/${id}/finish`,{method:'POST'}),
   pause:(id:string)=>request<any>(`/debates/${id}/pause`,{method:'POST'}),
   resume:(id:string)=>request<any>(`/debates/${id}/resume`,{method:'POST'}),
-  evolve:(project_id:string)=>request<any>('/evolution/runs',{method:'POST',headers:jsonHeaders,body:JSON.stringify({project_id,games:2})}),
+  evolve:(project_id:string)=>request<any>('/evolution/runs',{method:'POST',headers:jsonHeaders,body:JSON.stringify({project_id,mode:'incremental',games:2,iterations:1,max_new_games:1,reuse_trajectories:true,max_api_requests:10})}),
 }

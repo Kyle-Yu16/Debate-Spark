@@ -103,7 +103,7 @@ function WorkspaceView({project,workspace,setWorkspace,onPrepared,setBusy,setErr
     {tab==='攻防矩阵'&&<MatrixView workspace={workspace}/>}
     {tab==='洞见'&&<InsightsView workspace={workspace}/>}
     {tab==='发言稿'&&<DraftsView workspace={workspace} edit={editDraft}/>}
-    <section className="evolve-card"><div className="evolve-icon"><RefreshCw/></div><div><span className="tag">策略实验室</span><h3>让策略从对抗中成长</h3><p>{evo?`${evo.message} 累计 ${evo.aggregate_games} 场 / ${evo.unique_topics} 个辩题，候选胜率 ${(evo.aggregate_win_rate*100).toFixed(0)}%。`:'运行小规模双向自博弈；只有跨至少 5 个辩题、累计 20 场并达到 55% 胜率才会自动晋级。'}</p></div><button className="secondary" onClick={evolve} disabled={evolving}>{evolving?<LoaderCircle className="spin"/>:<BrainCircuit/>}{evolving?'评测中':'运行进化评测'}</button></section>
+    <section className="evolve-card"><div className="evolve-icon"><RefreshCw/></div><div><span className="tag">策略实验室</span><h3>让策略从对抗中成长</h3><p>{evo?`${evo.message} 实际 API 请求 ${evo.api_requests_used}/${evo.api_request_budget}。`:'默认复用既有成功与失败轨迹，最多新增 1 场并立即归纳；包括重试在内，实际 API 请求硬上限为 10。'}</p></div><button className="secondary" onClick={evolve} disabled={evolving}>{evolving?<LoaderCircle className="spin"/>:<BrainCircuit/>}{evolving?'增量学习中':'低成本更新 Skill'}</button></section>
     {evo?.skill&&<SkillView result={evo}/>}
   </div>
 }

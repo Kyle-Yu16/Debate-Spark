@@ -119,6 +119,7 @@ chmod +x start.sh
 | `LLM_BASE_URL` | 是 | 无 | OpenAI-compatible API 基础地址，可包含 `/v1`，末尾不要加 `/` |
 | `LLM_MODEL` | 是 | 无 | 由该服务提供的模型名称 |
 | `REQUEST_TIMEOUT` | 否 | `90` | 单次模型请求超时秒数 |
+| `MODEL_RETRIES` | 否 | `3` | 网络错误、限流或服务端错误的最大尝试次数 |
 | `DATABASE_PATH` | 否 | `./data/spark.db` | SQLite 数据库位置 |
 
 模型由 `.env` 中的 `LLM_MODEL` 决定，配置位置为 `backend/app/settings.py`；后端只依赖标准的 `/chat/completions` 请求与 `choices[0].message.content` 响应结构。
@@ -185,17 +186,36 @@ flowchart LR
 - `GET /api/strategies`：列出所有 Skill 版本和评测指标。
 - `GET /api/strategies/active`：获取当前正式 Skill 及完整 Markdown。
 - `GET /api/strategies/{id}`：查看指定候选、归档或正式版本。
-- `POST /api/evolution/runs`：指定辩题池、每题换边局数和迭代轮数，生成并评测候选 Skill。
+- `POST /api/evolution/runs`：默认执行有硬预算的增量学习；只有显式传入 `mode: "promotion"` 才运行完整晋级评测。
+- `GET /api/evolution/trajectories`：查看已保存的自博弈轨迹摘要。
+- `GET /api/evolution/trajectories/{id}`：查看一场轨迹的完整转录与裁判结果。
+- `GET /api/evolution/trajectories/stats`：查看成功、失败和平局轨迹的累计数量。
 
-演示降级内容不会参与晋级。一旦模型或裁判调用失败，进化任务会明确中止，避免把占位发言误当成有效经验。
+默认增量模式最多新打 1 场，通常需要 7 次逻辑调用（赛前、赛后各 1 次 Skill 修订，以及 4 次发言、1 次裁判），并通过 `max_api_requests=10` 限制包括重试和 JSON 修复在内的实际 HTTP 请求总数。达到上限立即停止，不会因服务抖动无限重试。还可将 `max_new_games` 设为 `0`，只用历史轨迹修订一次。赛后修订会立即吸收本场的成功与失败信息。新增辩题若没有现成备赛材料会被跳过，避免隐式产生研究费用。
+
+每场结束后，完整转录、评分、遗漏回应与亮点会立即写入 SQLite。胜局用于提炼可复用的成功选点，败局用于提炼失效条件和修正动作，平局用于识别边界；后续任务按结果类型均衡抽样，避免只学失败或只学胜利。即使后续模型调用失败，之前完成的轨迹也不会丢失。旧版本未保存完整转录时，系统仍会回收其评测摘要。
+
+仓库内的 `reports/final_debate_skill.json` 保存了轨迹库上线前完成的 3 题、2 轮、12 场真实评测摘要。系统会把其中的亮点和失败诊断作为只读种子经验载入；由于旧流程没有持久化逐句转录，不能恢复不存在的全文。新流程从第一场起保存完整轨迹。
+
+演示降级内容不会进入轨迹库或参与晋级。一旦模型或裁判调用失败，任务会标记为 `partial`，保留已完成对局，避免把占位发言误当成有效经验。
 
 仓库提供了包含事实辩、政策辩与价值辩的五题基准集。配置模型后可以运行：
 
 ```bash
-.venv/bin/python scripts/run_skill_evolution.py --iterations 2 --games 2
+.venv/bin/python scripts/run_skill_evolution.py --max-new-games 1
 ```
 
 最终 Skill 和完整 JSON 评测报告会分别写入 `reports/final_debate_skill.md` 与 `reports/final_debate_skill.json`。
+
+只有候选版本值得进行最终验收时，才显式启动昂贵的晋级模式：
+
+```bash
+.venv/bin/python scripts/run_skill_evolution.py \
+  --mode promotion \
+  --suite config/evolution_topics.json \
+  --iterations 2 \
+  --games 2
+```
 
 ### “思想火花”如何产生
 

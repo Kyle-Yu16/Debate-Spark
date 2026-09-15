@@ -58,15 +58,39 @@ def init_db() -> None:
               id TEXT PRIMARY KEY, status TEXT NOT NULL, config TEXT NOT NULL,
               metrics TEXT NOT NULL, created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS debate_trajectories (
+              id TEXT PRIMARY KEY, run_id TEXT NOT NULL, iteration INTEGER NOT NULL,
+              topic TEXT NOT NULL, candidate_id TEXT NOT NULL, champion_id TEXT NOT NULL,
+              candidate_stance TEXT NOT NULL, outcome TEXT NOT NULL,
+              transcript TEXT NOT NULL, evaluation TEXT NOT NULL, created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_trajectories_created_at
+              ON debate_trajectories(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_trajectories_topic
+              ON debate_trajectories(topic);
             """
         )
         db.execute(
             "INSERT OR IGNORE INTO strategies VALUES (?,?,?,?,?)",
-            ("baseline-v1", "active", encode(DEFAULT_SKILL), encode({"source": "built-in", "status": "active"}), now_iso()),
+            (
+                "baseline-v1",
+                "active",
+                encode(DEFAULT_SKILL),
+                encode({"source": "built-in", "status": "active"}),
+                now_iso(),
+            ),
         )
-        baseline = db.execute("SELECT config FROM strategies WHERE id='baseline-v1'").fetchone()
+        baseline = db.execute(
+            "SELECT config FROM strategies WHERE id='baseline-v1'"
+        ).fetchone()
         if baseline and "invariants" not in decode(baseline["config"], {}):
-            db.execute("UPDATE strategies SET config=?, metrics=? WHERE id='baseline-v1'", (encode(DEFAULT_SKILL), encode({"source": "built-in", "status": "active"})))
+            db.execute(
+                "UPDATE strategies SET config=?, metrics=? WHERE id='baseline-v1'",
+                (
+                    encode(DEFAULT_SKILL),
+                    encode({"source": "built-in", "status": "active"}),
+                ),
+            )
 
 
 def encode(value: Any) -> str:
