@@ -31,4 +31,6 @@ class WorkspacePatch(BaseModel):
 
 class EvolutionCreate(BaseModel):
     project_id: str
-    games: int = Field(default=2, ge=2, le=8)
+    games: int = Field(default=2, ge=2, le=4, description="每个辩题的换边对局数")
+    iterations: int = Field(default=1, ge=1, le=4)
+    topics: list[str] = Field(default_factory=list, max_length=8)

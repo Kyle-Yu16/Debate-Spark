@@ -7,6 +7,7 @@ from typing import Any
 
 from .llm import llm
 from .research import search_web
+from .strategy_skill import normalize_skill, skill_prompt
 
 
 def other(stance: str) -> str:
@@ -237,7 +238,7 @@ warnings: 数组。资料不足时明确写待核验。"""
         return normalize_workspace(result, topic, stance)
 
 
-async def generate_reply(topic: str, ai_stance: str, workspace: dict, transcript: list[dict], user_text: str, stage: str, difficulty: str, strategy: str = "平衡回应") -> dict:
+async def generate_reply(topic: str, ai_stance: str, workspace: dict, transcript: list[dict], user_text: str, stage: str, difficulty: str, strategy: dict | str = "平衡回应") -> dict:
     workspace = normalize_workspace(workspace, topic, ai_stance)
     evidence = workspace.get("evidence", [])[:6]
     history = "\n".join(f"{t['stance']}：{t['content']}" for t in transcript[-8:])
@@ -247,11 +248,13 @@ async def generate_reply(topic: str, ai_stance: str, workspace: dict, transcript
     banned = recurring_phrases(transcript, topic)
     covered = [as_text(turn.get("meta", {}).get("target")) for turn in same_side_turns if isinstance(turn.get("meta"), dict) and as_text(turn.get("meta", {}).get("target"))]
     criterion = workspace["analysis"]["criterion"]
+    strategy_text = skill_prompt(strategy) if isinstance(strategy, dict) else f"策略提示：{strategy}"
     prompt = f"""【不可改写的论题契约】原始辩题是：《{topic}》。你持{ai_stance}。
 核心判准：{criterion}
 任何定义、例子、类比都只能作为通向原始命题的桥，不能成为新的辩题。每段必须说明它如何改变原始辩题的结论；尤其不得把“某行为是否算X”偷换成原题的“某因素是否让主体更X”。
 
-当前阶段：{stage}；训练难度：{difficulty}；策略版本：{strategy}。
+当前阶段：{stage}；训练难度：{difficulty}。
+{strategy_text}
 本回合优先换用视角：{lens}。已经覆盖的攻击对象：{covered or '无'}。
 此前反复出现、现在禁止继续依赖的词组或类比：{banned or '无'}。不得再次使用此前出现过的具体人物、故事或比喻；除非对方最新发言首次引入且不回应会造成实质让步，此时只能用一句话处理，随后立即换到新的决定性争点。
 对方最新发言：{user_text}\n此前记录：\n{history or '无'}
@@ -283,19 +286,43 @@ async def generate_reply(topic: str, ai_stance: str, workspace: dict, transcript
             "explanation": "先准确复述对方，再指出推导缺口，最后把讨论拉回统一标准。", "evidence_ids": [],
             "spark": "支线再精彩，也不能替代原题的证明。", "lens": lens,
             "topic_link": f"将子问题重新连接到《{topic}》", "new_ground": "要求完成从子问题到原题结论的推理桥梁", "used_example": "", "novelty": 1.0,
+            "degraded": True,
         }
 
 
-async def arena_speech(topic: str, stance: str, workspace: dict, transcript: list[dict], stage: str, strategy: str = "baseline-v1") -> dict:
+async def arena_speech(topic: str, stance: str, workspace: dict, transcript: list[dict], stage: str, strategy: dict | str = "平衡回应") -> dict:
     opponent_turn = next((t["content"] for t in reversed(transcript) if t["stance"] != stance), "请先完成本方立论")
-    strategy_note = "优先发现被忽略的比较基线与二阶影响，但只有逻辑和证据过关才使用" if strategy.startswith("insight") else "优先完成直接、完整、可验证的回应"
-    return await generate_reply(topic, stance, workspace, transcript, opponent_turn, stage, "赛事", strategy_note)
+    return await generate_reply(topic, stance, workspace, transcript, opponent_turn, stage, "赛事", strategy)
+
+
+async def propose_skill_revision(champion: dict, experiences: list[dict], iteration: int, skill_id: str) -> dict:
+    """Distil match evidence into a candidate Skill without changing hard safety invariants."""
+    champion = normalize_skill(champion, skill_id=str(champion.get("id", "baseline-v1")))
+    evidence = json.dumps(experiences[-24:], ensure_ascii=False)
+    prompt = f"""你是辩论 Skill 维护者。请根据跨辩题复盘证据，为现有 Skill 生成一个小步、可解释的候选版本。
+现有 Skill：{json.dumps(champion, ensure_ascii=False)}
+复盘证据：{evidence or '暂无；此时只允许补足明确的决策步骤，不得虚构比赛经验'}
+
+要求：
+1. 不得删除或改弱现有 invariants；经验必须写成“触发条件—行动—原因—证据—置信度”。
+2. 只保留可跨辩题复用的经验，禁止记忆具体人物、金句或立场结论。
+3. lessons 最多12条；tactics 最多10条；合并重复项。
+4. 亮点原则必须强调先有完整论证再压缩表达。
+5. 这是第{iteration}轮候选，输出 JSON，包含name,purpose,decision_steps,tactics,lessons,anti_patterns,highlight_principles。每个 tactic 含name,when,action,risk；每个 lesson 含trigger,action,rationale,evidence,confidence。
+"""
+    proposed = await llm.json(prompt, temperature=0.35)
+    proposed = proposed if isinstance(proposed, dict) else {}
+    proposed["invariants"] = champion["invariants"]
+    proposed["version"] = f"1.{iteration}.0"
+    lineage_parent = champion.get("parent") if champion.get("id") == skill_id else champion["id"]
+    proposed["parent"] = lineage_parent
+    return normalize_skill(proposed, skill_id=skill_id, parent=lineage_parent)
 
 
 async def evaluate_debate(topic: str, turns: list[dict]) -> dict:
     transcript = "\n".join(f"{t['stance']}：{t['content']}" for t in turns)
     prompt = f"""匿名评审辩题《{topic}》的以下转录。不要根据立场偏好评分。必须检查两类退化：1）连续回合是否只换措辞却重复同一例子、类比或争点；2）是否把原始命题偷换成某个子概念的定义之争，却没有说明对子题的判断如何改变原题结论。发生任一情况时降低response、logic和insight分，并在missed_responses中明确指出。\n{transcript}
-输出JSON：winner(正方/反方/平局), scores对象且包含正方和反方，每方含persuasion,response,logic,evidence,insight五个0-100整数；turning_points数组；missed_responses数组；highlights数组（每项含quote,reason,stance）；exercises数组；summary字符串。"""
+输出JSON：winner(正方/反方/平局), scores对象且包含正方和反方，每方含persuasion,response,logic,evidence,insight五个0-100整数；turning_points数组；missed_responses数组；highlights数组（每项含quote,reason,stance）；fact_errors数组；rule_violations数组；exercises数组；summary字符串。"""
     try:
         return await llm.json(prompt, temperature=0.25)
     except Exception:
@@ -306,6 +333,7 @@ async def evaluate_debate(topic: str, turns: list[dict]) -> dict:
             "scores": {s: {"persuasion": 72, "response": 70, "logic": 74, "evidence": 58, "insight": 71} for s in ("正方", "反方")},
             "turning_points": ["双方围绕比较标准形成了正面交锋"], "missed_responses": ["需要用经过核验的证据补强因果判断"],
             "highlights": [], "exercises": ["用三句话完成复述、拆解、反攻训练"], "summary": "这是离线演示评分；配置模型服务后可获得逐场语义评审。",
+            "fact_errors": [], "rule_violations": [], "degraded": True,
         }
 
 

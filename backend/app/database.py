@@ -6,6 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 from .settings import settings
+from .strategy_skill import DEFAULT_SKILL
 
 
 def now_iso() -> str:
@@ -61,8 +62,11 @@ def init_db() -> None:
         )
         db.execute(
             "INSERT OR IGNORE INTO strategies VALUES (?,?,?,?,?)",
-            ("baseline-v1", "active", encode({"response": 1.0, "insight": 0.7, "evidence": 1.0}), encode({"source": "built-in"}), now_iso()),
+            ("baseline-v1", "active", encode(DEFAULT_SKILL), encode({"source": "built-in", "status": "active"}), now_iso()),
         )
+        baseline = db.execute("SELECT config FROM strategies WHERE id='baseline-v1'").fetchone()
+        if baseline and "invariants" not in decode(baseline["config"], {}):
+            db.execute("UPDATE strategies SET config=?, metrics=? WHERE id='baseline-v1'", (encode(DEFAULT_SKILL), encode({"source": "built-in", "status": "active"})))
 
 
 def encode(value: Any) -> str:

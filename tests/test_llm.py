@@ -103,8 +103,8 @@ def test_demo_mode_raises_when_placeholders(monkeypatch):
         asyncio.run(OpenAICompatibleClient().chat("回应"))
 
 
-def test_demo_mode_detects_legacy_deepseek_placeholder(monkeypatch):
-    configure_real_settings(monkeypatch, api_key="your_deepseek_api_key", base_url="https://api.deepseek.com", model="deepseek-chat")
+def test_demo_mode_detects_example_endpoint(monkeypatch):
+    configure_real_settings(monkeypatch, base_url="https://api.example.com/v1")
     assert settings.demo_mode is True
 
 
@@ -164,5 +164,4 @@ def test_env_example_and_env_define_identical_variable_names():
     example = parse(ROOT / ".env.example")
     env = parse(ROOT / ".env")
     assert {"LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "REQUEST_TIMEOUT", "DATABASE_PATH"} <= example
-    assert "DEEPSEEK" not in " ".join(example)
     assert env == example

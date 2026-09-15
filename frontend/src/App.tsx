@@ -104,7 +104,13 @@ function WorkspaceView({project,workspace,setWorkspace,onPrepared,setBusy,setErr
     {tab==='洞见'&&<InsightsView workspace={workspace}/>}
     {tab==='发言稿'&&<DraftsView workspace={workspace} edit={editDraft}/>}
     <section className="evolve-card"><div className="evolve-icon"><RefreshCw/></div><div><span className="tag">策略实验室</span><h3>让策略从对抗中成长</h3><p>{evo?`${evo.message} 累计 ${evo.aggregate_games} 场 / ${evo.unique_topics} 个辩题，候选胜率 ${(evo.aggregate_win_rate*100).toFixed(0)}%。`:'运行小规模双向自博弈；只有跨至少 5 个辩题、累计 20 场并达到 55% 胜率才会自动晋级。'}</p></div><button className="secondary" onClick={evolve} disabled={evolving}>{evolving?<LoaderCircle className="spin"/>:<BrainCircuit/>}{evolving?'评测中':'运行进化评测'}</button></section>
+    {evo?.skill&&<SkillView result={evo}/>}
   </div>
+}
+
+function SkillView({result}:{result:any}){
+  const skill=result.skill
+  return <section className="skill-view"><div className="panel-heading"><div><span className="kicker">EVOLVED DEBATE SKILL</span><h2>{skill.name} <small>{skill.version}</small></h2></div><span className={`skill-status ${result.promoted?'active':'candidate'}`}>{result.promoted?'已晋级':'候选版'}</span></div><p className="skill-purpose">{skill.purpose}</p><div className="skill-columns"><div><h3>决策流程</h3><ol>{skill.decision_steps.map((item:string)=><li key={item}>{item}</li>)}</ol></div><div><h3>本轮沉淀经验</h3>{skill.lessons.length?<ul>{skill.lessons.map((item:any,index:number)=><li key={`${index}-${item.trigger}`}><b>{item.trigger}</b><span>{item.action}</span><small>{Math.round(item.confidence*100)}% 置信度</small></li>)}</ul>:<p className="muted">本轮尚未形成可跨辩题复用的经验。</p>}</div></div><details><summary>查看完整 Skill 文本</summary><pre>{result.skill_markdown}</pre></details></section>
 }
 
 function DebateHistory({debates,onOpen,onDelete,empty}:{debates:DebateHistory[];onOpen:(d:DebateHistory)=>void;onDelete:(d:DebateHistory)=>void;empty:string}){

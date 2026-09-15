@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -18,14 +19,17 @@ class Settings:
 
     @property
     def demo_mode(self) -> bool:
-        placeholder_keys = {"your_api_key", "your_deepseek_api_key", "changeme", "sk-xxx"}
+        placeholder_keys = {"your_api_key", "changeme", "sk-xxx"}
         placeholder_models = {"your_model_name", "changeme"}
+        hostname = (urlparse(self.base_url).hostname or "").lower()
         return (
             not bool(self.api_key)
             or not bool(self.base_url)
             or not bool(self.model)
             or self.api_key.strip().lower() in placeholder_keys
             or self.model.strip().lower() in placeholder_models
+            or hostname == "example.com"
+            or hostname.endswith(".example.com")
         )
 
 

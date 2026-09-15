@@ -81,3 +81,22 @@
 .history-empty { border: 1px dashed #cbc5b8; border-radius: 9px; color: var(--muted); font-size: 11px; padding: 22px 12px; text-align: center; }
 .history-refresh { font-size: 10px; padding: 7px 10px; }
 .mode-history { margin: 40px auto 0; max-width: 780px; text-align: left; }
+
+.skill-view { background: var(--paper); border: 1px solid var(--line); border-radius: 13px; margin-top: 16px; padding: 23px; }
+.skill-view h2 { font-family: "Noto Serif SC"; font-size: 19px; margin: 5px 0; }
+.skill-view h2 small { color: var(--muted); font-family: inherit; font-size: 10px; }
+.skill-purpose { color: #625f58; font-size: 12px; line-height: 1.65; }
+.skill-status { border-radius: 20px; font-size: 9px; font-weight: 600; padding: 5px 9px; }
+.skill-status.active { background: #e3efb2; color: #526019; }
+.skill-status.candidate { background: #ebe7f3; color: #65587d; }
+.skill-columns { display: grid; gap: 18px; grid-template-columns: 1fr 1fr; margin-top: 18px; }
+.skill-columns > div { background: #f0ede6; border-radius: 9px; padding: 15px; }
+.skill-columns h3 { font-family: "Noto Serif SC"; font-size: 13px; margin: 0 0 10px; }
+.skill-columns ol, .skill-columns ul { margin: 0; padding-left: 20px; }
+.skill-columns li { color: #58554f; font-size: 10px; line-height: 1.6; margin: 6px 0; }
+.skill-columns li b, .skill-columns li span, .skill-columns li small { display: block; }
+.skill-columns li span { margin-top: 2px; }
+.skill-columns li small { color: #8d8980; margin-top: 2px; }
+.skill-view details { border-top: 1px solid var(--line); margin-top: 17px; padding-top: 12px; }
+.skill-view summary { color: #65587d; cursor: pointer; font-size: 10px; }
+.skill-view pre { background: #292a26; border-radius: 9px; color: #dedfd9; font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; line-height: 1.65; margin: 12px 0 0; max-height: 420px; overflow: auto; padding: 16px; white-space: pre-wrap; }
