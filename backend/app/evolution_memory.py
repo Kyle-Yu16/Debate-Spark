@@ -145,6 +145,32 @@ def load_legacy_evolution_experiences(limit: int = 12) -> list[dict[str, Any]]:
             )
             if len(experiences) >= limit:
                 return experiences
+    showcase_path = (
+        Path(__file__).resolve().parents[2] / "reports" / "showcase_debates.json"
+    )
+    if showcase_path.exists():
+        try:
+            showcase = json.loads(showcase_path.read_text(encoding="utf-8"))
+            for debate in showcase.get("debates", []):
+                evaluation = debate.get("evaluation", {})
+                if not evaluation:
+                    continue
+                experiences.append(
+                    {
+                        "source": "决赛展示真实对辩轨迹",
+                        "run_id": showcase.get("run_id"),
+                        "topic": debate.get("topic"),
+                        "outcome": "mixed",
+                        "scores": evaluation.get("scores", {}),
+                        "missed_responses": evaluation.get("missed_responses", [])[:6],
+                        "successful_patterns": evaluation.get("highlights", [])[:4],
+                        "learning_instruction": "双方使用同一Skill，不学习立场胜负；只提炼共同暴露的成功战术、遗漏回应和证据边界。",
+                    }
+                )
+                if len(experiences) >= limit:
+                    return experiences
+        except (OSError, json.JSONDecodeError):
+            pass
     return experiences
 
 

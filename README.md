@@ -217,6 +217,14 @@ flowchart LR
   --games 2
 ```
 
+生成决赛展示用的小规模真实对辩与亮点报告：
+
+```bash
+.venv/bin/python scripts/run_showcase_debates.py --max-api-requests 20
+```
+
+脚本逐回合写入检查点，输出 `reports/showcase_debates.md` 和对应 JSON。即使中途触发预算或服务失败，已完成发言也会保留。后续 Skill 更新会读取裁判提炼的亮点和遗漏回应，但不会把双方使用同一 Skill 的展示赛胜负误当成候选版本胜率。
+
 ### “思想火花”如何产生
 
 1. **发散**：从反事实、边界条件、二阶影响等不同视角生成候选角度。

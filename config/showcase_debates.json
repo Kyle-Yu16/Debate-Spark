@@ -1,0 +1,91 @@
+{
+  "debates": [
+    {
+      "topic": "AI公司以攻克重大数学难题作为模型能力基准，对数学发展弊大于利",
+      "criterion": "比较这种竞赛式激励对概念理解、知识传承、成果核验和长期创新的净影响",
+      "conflicts": ["答案产量与概念理解", "突破速度与共同体核验", "技术进步与署名激励"],
+      "evidence": [
+        {
+          "id": "math-1",
+          "title": "A Severe Misalignment of AI in Mathematics",
+          "claim": "2026年9月11日，陶哲轩等25位菲尔兹奖得主声明：把解决数学难题作为AI基准可能损害数学科学与共同体；解题只是理解与洞见的代理指标。",
+          "url": "https://terrytao.wordpress.com/2026/09/11/a-severe-misalignment-of-ai-in-mathematics/",
+          "domain": "terrytao.wordpress.com",
+          "date": "2026-09-11",
+          "credibility": "一手声明",
+          "scope": "支持对当前竞赛激励的批评，不等于数学家全面抵制AI",
+          "counter": "声明也承认AI能够促进和加速真正的数学研究与理解"
+        },
+        {
+          "id": "math-2",
+          "title": "ETH Zurich interview with Alessio Figalli",
+          "claim": "菲尔兹奖得主Alessio Figalli认为AI不会简单取代数学家，但对教育、研究动机与知识传承表示担忧。",
+          "url": "https://ethz.ch/en/news-and-events/eth-news/news/2026/09/no-ai-will-replace-mathematicians-but-i-am-concerned-about-education.html",
+          "domain": "ethz.ch",
+          "date": "2026-09-14",
+          "credibility": "高校官方访谈",
+          "scope": "专家判断而非因果实验",
+          "counter": "担忧可以通过制度设计缓解，不能直接推出基准竞赛必然弊大于利"
+        }
+      ]
+    },
+    {
+      "topic": "高校应该将合理使用生成式AI纳入学生必修训练",
+      "criterion": "比较必修训练与分散自学在能力、公平、学术诚信和机会成本上的净效果",
+      "conflicts": ["工具能力与基础能力", "普惠教育与课程挤占", "规范使用与作弊便利"],
+      "evidence": [
+        {
+          "id": "edu-1",
+          "title": "UNESCO AI competency framework for students",
+          "claim": "UNESCO学生AI能力框架提出人本思维、AI伦理、技术与应用、系统设计四个维度，并主张把AI学习目标纳入正式课程。",
+          "url": "https://www.unesco.org/en/articles/ai-competency-framework-students",
+          "domain": "unesco.org",
+          "date": "2024-08-08",
+          "credibility": "联合国教科文组织官方框架",
+          "scope": "提供课程框架，不直接证明所有高校都应设置同一种必修课",
+          "counter": "可以通过专业课程嵌入而非独立必修课实现"
+        },
+        {
+          "id": "edu-2",
+          "title": "UNESCO Guidance for generative AI in education and research",
+          "claim": "UNESCO建议开展负责任使用培训、重设作业与评估，并指出自动识别AI生成内容的有效性证据有限。",
+          "url": "https://www.unesco.org/en/articles/guidance-generative-ai-education-and-research",
+          "domain": "unesco.org",
+          "date": "2023-09-07（2026-01-16更新）",
+          "credibility": "联合国教科文组织官方指南",
+          "scope": "强调人本、隐私、伦理和教学设计，不等同于无条件推广",
+          "counter": "制度建设和教师培训本身有显著成本"
+        }
+      ]
+    },
+    {
+      "topic": "面对高度不确定的时代，当代年轻人更应该优先建立稳定性",
+      "criterion": "比较两种人生策略在抗风险能力、能力增长、机会可逆性和成本外溢上的长期净收益",
+      "conflicts": ["安全底盘与路径依赖", "探索收益与失败成本", "个人选择与家庭外溢"],
+      "evidence": [
+        {
+          "id": "youth-1",
+          "title": "ILO Youth employment: Decent work, brighter futures",
+          "claim": "国际劳工组织2025年政策简报称全球约20.4%的青年不在就业、教育或培训之中，并强调经济不确定性下促进青年体面就业的重要性。",
+          "url": "https://www.ilo.org/publications/youth-employment-decent-work-brighter-futures",
+          "domain": "ilo.org",
+          "date": "2025-02-10",
+          "credibility": "国际劳工组织官方简报",
+          "scope": "全球总体数据，不能直接代表中国所有年轻人，也不直接比较两种人生取向",
+          "counter": "不稳定的劳动力市场也可能提高可迁移技能和主动探索的价值"
+        },
+        {
+          "id": "youth-2",
+          "title": "WHO Mental health at work policy brief",
+          "claim": "WHO指出不充分或不稳定的收入与就业不安全会增加生活多方面的不确定性，并可能严重损害心理健康。",
+          "url": "https://www.who.int/publications/i/item/9789240053052",
+          "domain": "who.int",
+          "date": "2022-09-28",
+          "credibility": "世界卫生组织官方指南",
+          "scope": "支持稳定工作条件的健康价值，不证明单一职业路径最优",
+          "counter": "组织稳定可能伴随技能锁定和控制感下降"
+        }
+      ]
+    }
+  ]
+}
