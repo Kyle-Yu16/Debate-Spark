@@ -46,6 +46,55 @@ def as_list(value: Any) -> list:
     return value if isinstance(value, list) else [value]
 
 
+def normalize_evaluation(raw: Any) -> dict[str, Any]:
+    """Normalize judge output so saved reviews are always safe for the UI."""
+    data = raw if isinstance(raw, dict) else {}
+    winner = as_text(data.get("winner"), "平局")
+    if winner not in {"正方", "反方", "平局"}:
+        winner = "平局"
+
+    raw_scores = data.get("scores") if isinstance(data.get("scores"), dict) else {}
+    dimensions = ("persuasion", "response", "logic", "evidence", "insight")
+    scores: dict[str, dict[str, int]] = {}
+    for stance in ("正方", "反方"):
+        side = raw_scores.get(stance) if isinstance(raw_scores.get(stance), dict) else {}
+        scores[stance] = {}
+        for dimension in dimensions:
+            try:
+                score = int(float(side.get(dimension, 0)))
+            except (TypeError, ValueError):
+                score = 0
+            scores[stance][dimension] = max(0, min(100, score))
+
+    def text_items(key: str) -> list[str]:
+        return [text for item in as_list(data.get(key)) if (text := as_text(item))]
+
+    highlights = []
+    for item in as_list(data.get("highlights")):
+        if not isinstance(item, dict):
+            continue
+        highlights.append(
+            {
+                "quote": as_text(item.get("quote")),
+                "reason": as_text(item.get("reason")),
+                "stance": as_text(item.get("stance")),
+            }
+        )
+
+    return {
+        "winner": winner,
+        "scores": scores,
+        "turning_points": text_items("turning_points"),
+        "missed_responses": text_items("missed_responses"),
+        "highlights": highlights,
+        "fact_errors": text_items("fact_errors"),
+        "rule_violations": text_items("rule_violations"),
+        "exercises": text_items("exercises"),
+        "summary": as_text(data.get("summary"), "本场复盘暂未生成摘要。"),
+        "degraded": bool(data.get("degraded", False)),
+    }
+
+
 def normalize_workspace(
     raw: Any, topic: str = "", stance: str = "正方"
 ) -> dict[str, Any]:
@@ -557,14 +606,14 @@ async def evaluate_debate(topic: str, turns: list[dict]) -> dict:
 还需检查是否回答对方的具体质疑，是否解释现实中谁承担何种后果。只喊“比较基线、净影响、举证责任”却不给理由，不算有效反驳。同一问题有新回应不算重复，主动让步并补充适用条件可以得分。不要为华丽措辞加分。highlights 可以为空，quote 必须逐字来自转录，reason 要解释回应了哪一质疑以及成立边界。最后一轮提出的新质疑尚无回应机会，不应当作对方故意回避。无法从转录核验的事实标为待核验，不等于已证实错误。
 输出JSON：winner(正方/反方/平局), scores对象且包含正方和反方，每方含persuasion,response,logic,evidence,insight五个0-100整数；turning_points数组；missed_responses数组；highlights数组（每项含quote,reason,stance）；fact_errors数组；rule_violations数组；exercises数组；summary字符串。"""
     try:
-        return await llm.json(prompt, temperature=0.25)
+        return normalize_evaluation(await llm.json(prompt, temperature=0.25))
     except Exception:
         count = {
             "正方": sum(len(t["content"]) for t in turns if t["stance"] == "正方"),
             "反方": sum(len(t["content"]) for t in turns if t["stance"] == "反方"),
         }
         winner = max(count, key=count.get) if count["正方"] != count["反方"] else "平局"
-        return {
+        return normalize_evaluation({
             "winner": winner,
             "scores": {
                 s: {
@@ -584,7 +633,7 @@ async def evaluate_debate(topic: str, turns: list[dict]) -> dict:
             "fact_errors": [],
             "rule_violations": [],
             "degraded": True,
-        }
+        })
 
 
 async def short_pause(delay: float = 0.35):

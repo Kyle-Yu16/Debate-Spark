@@ -10,7 +10,7 @@ export interface Workspace {
   insights:Insight[]; drafts:Record<string,string|string[]>; warnings:string[]
 }
 export interface Turn { id:string; speaker:string; stance:Stance; stage:string; content:string; meta:Record<string,any>; created_at:string }
-export interface Evaluation { winner:string; scores:Record<string,Record<string,number>>; turning_points:string[]; missed_responses:string[]; highlights:{quote:string;reason:string;stance:string}[]; exercises:string[]; summary:string }
+export interface Evaluation { winner:string; scores:Record<string,Record<string,number>>; turning_points:unknown[]; missed_responses:unknown[]; highlights:{quote:string;reason:string;stance:string}[]; exercises:unknown[]; summary:unknown }
 export interface Debate { id:string; project_id:string; mode:'human'|'arena'; user_stance:Stance; difficulty:string; status:string; state:any; turns?:Turn[]; evaluation?:Evaluation }
 export interface WorkspaceVersion { id:string; label:string; created_at:string }
 export interface DebateHistory extends Debate { turn_count:number; created_at:string; updated_at:string }

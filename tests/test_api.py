@@ -52,6 +52,61 @@ def test_project_validation():
         assert response.status_code == 422
 
 
+def test_finished_arena_history_normalizes_structured_judge_output(monkeypatch):
+    client = make_client()
+    async def fake_prepare(topic, stance):
+        return {
+            "topic": topic,
+            "stance": stance,
+            "analysis": {"keywords": [], "definitions": [], "conflicts": [], "criterion": "", "burdens": {}},
+            "arguments": [], "evidence": [], "matrix": [], "insights": [],
+            "drafts": {"立论": "", "攻辩": [], "自由辩论": [], "总结": ""},
+            "warnings": [],
+        }
+
+    monkeypatch.setattr(main, "prepare_workspace", fake_prepare)
+    with client:
+        project = client.post(
+            "/api/projects",
+            json={"topic": "人工智能是否让教育更公平", "stance": "正方"},
+        ).json()
+        client.post(f"/api/projects/{project['id']}/prepare")
+        debate = client.post(
+            "/api/debates",
+            json={
+                "project_id": project["id"],
+                "mode": "arena",
+                "user_stance": "正方",
+                "difficulty": "赛事",
+            },
+        ).json()
+        malformed = {
+            "winner": "反方",
+            "scores": {"正方": {"logic": 76}, "反方": {"logic": "81"}},
+            "turning_points": [
+                {"description": "反方指出比较基线不一致", "impact": "争点改变"}
+            ],
+            "exercises": [{"action": "补充同制度下的对照"}],
+            "summary": {"result": "反方回应更完整"},
+        }
+        with main.connect() as db:
+            db.execute(
+                "UPDATE debates SET status='finished', evaluation=? WHERE id=?",
+                (main.encode(malformed), debate["id"]),
+            )
+
+        reopened = client.get(f"/api/debates/{debate['id']}")
+        assert reopened.status_code == 200
+        evaluation = reopened.json()["evaluation"]
+        assert evaluation["turning_points"] == [
+            "description：反方指出比较基线不一致；impact：争点改变"
+        ]
+        assert evaluation["exercises"] == ["action：补充同制度下的对照"]
+        assert evaluation["summary"] == "result：反方回应更完整"
+        assert evaluation["scores"]["反方"]["logic"] == 81
+        assert evaluation["scores"]["反方"]["evidence"] == 0
+
+
 def test_nested_model_workspace_is_normalized_before_reaching_ui(monkeypatch):
     client = make_client()
     malformed = {

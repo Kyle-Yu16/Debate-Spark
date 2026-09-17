@@ -9,6 +9,7 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 from .agents import (
     arena_speech,
     evaluate_debate,
+    normalize_evaluation,
     normalize_workspace,
     other,
     prepare_workspace,
@@ -81,7 +82,10 @@ def get_debate(debate_id: str) -> dict:
     if not row:
         raise HTTPException(404, "辩论会话不存在")
     row["state"] = decode(row["state"], {})
-    row["evaluation"] = decode(row["evaluation"], None)
+    raw_evaluation = decode(row["evaluation"], None)
+    row["evaluation"] = (
+        normalize_evaluation(raw_evaluation) if raw_evaluation is not None else None
+    )
     return row
 
 
