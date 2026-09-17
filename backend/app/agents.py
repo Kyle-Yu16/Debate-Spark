@@ -428,7 +428,8 @@ async def generate_reply(
     same_side_turns = [turn for turn in transcript if turn.get("stance") == ai_stance]
     lens_index = len(same_side_turns) % len(LENSES)
     lens = LENSES[lens_index]
-    banned = recurring_phrases(transcript, topic)
+    # Shared terms are often necessary for direct responses, not forbidden words.
+    repeated_phrases = recurring_phrases(same_side_turns, topic)
     covered = [
         as_text(turn.get("meta", {}).get("target"))
         for turn in same_side_turns
@@ -447,34 +448,34 @@ async def generate_reply(
 
 当前阶段：{stage}；训练难度：{difficulty}。
 {strategy_text}
-本回合优先换用视角：{lens}。已经覆盖的攻击对象：{covered or '无'}。
-此前反复出现、现在禁止继续依赖的词组或类比：{banned or '无'}。不得再次使用此前出现过的具体人物、故事或比喻；除非对方最新发言首次引入且不回应会造成实质让步，此时只能用一句话处理，随后立即换到新的决定性争点。
+可选观察视角：{lens}，仅在有助于回应时采用，不要求轮换视角或战术。已经讨论的对象：{covered or '无'}。
+本方多次使用的词组：{repeated_phrases or '无'}。这些只是重复风险提示，不是禁词。允许继续讨论同一例子或问题，但必须回答新质疑、补充原因、条件或后果；不要复述旧论证，也不要为了换例子丢掉尚未回答的关键问题。
 对方最新发言：{user_text}\n此前记录：\n{history or '无'}
 冻结证据卡：{evidence}
-先判断对方发言与原题的关联，再选择一个此前没有充分展开、但更可能决定胜负的争点。自由辩论不能连续两轮使用同一战术；总结必须跨至少两个争点收束，不能继续沉迷单个类比。没有可靠证据时使用审慎措辞。
-输出 JSON：speech(180-320字中文发言), target(回应对象), tactic, issue(漏洞类型), explanation(结构化说明), evidence_ids(数组), spark(有力量但不刻意求新的句子), lens(本轮视角), topic_link(本轮论证如何直接回答原始辩题), new_ground(相对前文新增的实质内容), used_example(使用的具体例子；没有则为空字符串)。"""
+【本轮回应要求，优先于 Skill 中的求新建议】
+先准确、简短地回应对方最新发言里最影响结论的质疑，再给本方理由。对方没有发言时直接立论，不要虚构对方观点。不强行给对方扣逻辑谬误的帽子，也不要只要求对方举证而不给自己的判断。
+把抽象判断讲成人能理解的因果关系：谁面临什么选择，受到什么限制，选择后会有什么具体变化。适合时用贴近生活的情境说明，假设必须明确说“假设”或“例如”，不能伪装成调查或真实个案，不能用一个故事证明所有人。若继续原情境能答清问题，就不要另起故事。
+只说“机会成本”不够，要讲清楚为此放弃了什么；只说“净效应未闭合”不够，要讲清哪一项收益或代价还没比较。不要堆砌“同资源、可迁移、判准、净增量”等词。定义澄清应简短，随后回到实际选择的差异，不能靠扩大定义把对方收益全算成本方收益。
+总结围绕已经发生的主要交锋收束。没有可靠证据时使用审慎措辞，evidence_ids 只能引用冻结证据卡的 ID。
+输出 JSON：speech(180-320字中文发言), target(对方的具体主张或问题), tactic, issue(没有明确漏洞可写无), explanation(简明策略说明，不输出隐藏推理), evidence_ids(数组), spark(可为空；只能摘录 speech 中已经完成论证的一句话，不另造金句), lens(实际视角), topic_link(如何回答原始辩题), new_ground(本轮新增的回答、理由或适用条件), used_example(具体情境；没有则为空字符串)。"""
     try:
         result = normalize_reply(await llm.json(prompt, temperature=0.72), lens, topic)
         similarity = similarity_to_history(result["speech"], transcript, ai_stance)
-        repeats_banned = [
-            phrase for phrase in banned if phrase in normalized_chars(result["speech"])
-        ]
-        needs_rewrite = (
-            similarity >= 0.52 or bool(repeats_banned) or not result["new_ground"]
-        )
+        needs_rewrite = similarity >= 0.52 or not result["new_ground"]
         if needs_rewrite:
-            next_lens = LENSES[(lens_index + 1) % len(LENSES)]
-            audit = f"初稿与本方历史相似度{similarity:.0%}；重复片段{repeats_banned or '无'}；新增内容说明{result['new_ground'] or '缺失'}"
+            audit = f"初稿与本方历史相似度{similarity:.0%}；新增内容说明{result['new_ground'] or '缺失'}"
             rewrite_prompt = f"""{prompt}
 
-你刚才的初稿未通过多样性审计：{audit}。
-废弃该初稿，不要只换措辞。改用“{next_lens}”视角，换一个真正可能改变胜负的论证机制或比较基线；禁止使用初稿中的具体人物和类比。
+你刚才的初稿需要修订：{audit}。
+先保留对方尚未获答的核心问题，再补上缺少的回答、原因、适用条件或实际后果。不要只换措辞，也不要为躲避重复而转移争点。
 待废弃初稿：{json.dumps(result, ensure_ascii=False)}"""
             result = normalize_reply(
-                await llm.json(rewrite_prompt, temperature=0.78), next_lens, topic
+                await llm.json(rewrite_prompt, temperature=0.65), lens, topic
             )
             similarity = similarity_to_history(result["speech"], transcript, ai_stance)
         result["novelty"] = round(max(0.0, 1.0 - similarity), 3)
+        if result["spark"] not in result["speech"]:
+            result["spark"] = ""
         return result
     except Exception:
         target = user_text[:60]
@@ -519,17 +520,24 @@ async def propose_skill_revision(
     champion = normalize_skill(
         champion, skill_id=str(champion.get("id", "baseline-v1"))
     )
-    evidence = json.dumps(experiences[-24:], ensure_ascii=False)
+    # Bound input cost as well as request count. Never cut serialized JSON in
+    # the middle of a record. Complete transcripts remain in the database.
+    selected = []
+    for experience in reversed(experiences[-24:]):
+        candidate_evidence = json.dumps([experience, *selected], ensure_ascii=False)
+        if len(candidate_evidence) <= 20000:
+            selected.insert(0, experience)
+    evidence = json.dumps(selected, ensure_ascii=False)
     prompt = f"""你是辩论 Skill 维护者。请根据跨辩题复盘证据，为现有 Skill 生成一个小步、可解释的候选版本。
 现有 Skill：{json.dumps(champion, ensure_ascii=False)}
-复盘证据：{evidence or '暂无；此时只允许补足明确的决策步骤，不得虚构比赛经验'}
+复盘证据（有长度限制的节选，不是完整转录）：{evidence if selected else '暂无；此时只允许补足明确的决策步骤，不得虚构比赛经验'}
 
 要求：
 1. 不得删除或改弱现有 invariants；经验必须写成“触发条件—行动—原因—证据—置信度”。
 2. 成功轨迹提炼可复用的选点与表达决策，失败轨迹提炼触发条件与修正动作；两者都不得浪费。
 3. 只保留可跨辩题复用的经验，禁止记忆具体人物、整句发言、金句或立场结论。
 4. lessons 最多12条；tactics 最多10条；合并重复项。
-5. 亮点原则必须强调先有完整论证再压缩表达。
+5. 亮点原则必须强调先有完整论证再压缩表达。优先学习如何回应具体质疑、说明现实条件和后果，不把抽象术语或强制换视角当作进步。成功发言也要记录适用边界，失败记录也可包含有效回应。
 6. 这是第{iteration}轮候选，输出 JSON，包含name,purpose,decision_steps,tactics,lessons,anti_patterns,highlight_principles。每个 tactic 含name,when,action,risk；每个 lesson 含trigger,action,rationale,evidence,confidence。
 """
     proposed = await llm.json(prompt, temperature=0.35)
@@ -546,6 +554,7 @@ async def propose_skill_revision(
 async def evaluate_debate(topic: str, turns: list[dict]) -> dict:
     transcript = "\n".join(f"{t['stance']}：{t['content']}" for t in turns)
     prompt = f"""匿名评审辩题《{topic}》的以下转录。不要根据立场偏好评分。必须检查两类退化：1）连续回合是否只换措辞却重复同一例子、类比或争点；2）是否把原始命题偷换成某个子概念的定义之争，却没有说明对子题的判断如何改变原题结论。发生任一情况时降低response、logic和insight分，并在missed_responses中明确指出。\n{transcript}
+还需检查是否回答对方的具体质疑，是否解释现实中谁承担何种后果。只喊“比较基线、净影响、举证责任”却不给理由，不算有效反驳。同一问题有新回应不算重复，主动让步并补充适用条件可以得分。不要为华丽措辞加分。highlights 可以为空，quote 必须逐字来自转录，reason 要解释回应了哪一质疑以及成立边界。最后一轮提出的新质疑尚无回应机会，不应当作对方故意回避。无法从转录核验的事实标为待核验，不等于已证实错误。
 输出JSON：winner(正方/反方/平局), scores对象且包含正方和反方，每方含persuasion,response,logic,evidence,insight五个0-100整数；turning_points数组；missed_responses数组；highlights数组（每项含quote,reason,stance）；fact_errors数组；rule_violations数组；exercises数组；summary字符串。"""
     try:
         return await llm.json(prompt, temperature=0.25)

@@ -16,6 +16,21 @@ def outcome_for(winner: str, candidate_stance: str) -> str:
 def trajectory_experience(row: dict[str, Any]) -> dict[str, Any]:
     evaluation = row.get("evaluation", {})
     candidate_stance = row.get("candidate_stance", "正方")
+    # Keep the challenge and answer together. A detached highlight cannot show
+    # what worked or whether the answer actually addressed its opponent.
+    exchanges = []
+    opponent = ""
+    for turn in row.get("transcript", []):
+        if turn.get("stance") != candidate_stance:
+            opponent = str(turn.get("content", ""))
+        else:
+            meta = turn.get("meta") or {}
+            exchanges.append({
+                "opponent": opponent[:360],
+                "response": str(turn.get("content", ""))[:360],
+                "target": str(meta.get("target", ""))[:160],
+                "new_ground": str(meta.get("new_ground", ""))[:160],
+            })
     highlights = [
         item
         for item in evaluation.get("highlights", [])
@@ -27,6 +42,7 @@ def trajectory_experience(row: dict[str, Any]) -> dict[str, Any]:
         "topic": row.get("topic"),
         "outcome": row.get("outcome"),
         "candidate_stance": candidate_stance,
+        "exchanges": exchanges[-2:],
         "scores": evaluation.get("scores", {}).get(candidate_stance, {}),
         "successful_patterns": highlights[:4],
         "missed_responses": evaluation.get("missed_responses", [])[:6],
@@ -96,6 +112,7 @@ def load_trajectory_experiences(limit: int = 24) -> list[dict[str, Any]]:
     for raw in rows:
         row = dict(raw)
         row["evaluation"] = decode(row["evaluation"], {})
+        row["transcript"] = decode(row["transcript"], [])
         groups.get(row["outcome"], groups["draw"]).append(trajectory_experience(row))
     result: list[dict[str, Any]] = []
     while len(result) < limit and any(groups.values()):

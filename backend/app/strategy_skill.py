@@ -18,10 +18,12 @@ DEFAULT_SKILL: dict[str, Any] = {
     ],
     "decision_steps": [
         "提取对方的主张、依据、结论、问题和隐含前提。",
+        "先回答对方最重要的具体质疑，再说明本方理由；不靠追问逃避自己的举证。",
         "把对方发言映射回原辩题的判准和当前争点。",
         "识别最可能改变胜负且尚未充分回应的一个目标。",
         "生成直接反驳、追问、反例、让步反转、标准争夺等候选战术。",
         "按影响力、紧迫度、证据强度和理解成本选择战术。",
+        "说明谁面临什么选择、限制和后果；假设情境必须标明，不能当作普遍证据。",
         "检查回扣原题、逻辑链、证据边界、重复度和阶段任务后再表达。",
     ],
     "tactics": [
@@ -36,6 +38,8 @@ DEFAULT_SKILL: dict[str, Any] = {
         "把‘某行为是否算作某概念’偷换成‘某因素是否提升该能力’。",
         "只改写措辞，没有新增机制、比较或证据。",
         "为了追求一句漂亮话牺牲准确性。",
+        "为了强制换视角或战术，放弃尚未回答的问题。",
+        "反复喊净影响或举证责任，却不解释具体收益、代价和原因。",
     ],
     "highlight_principles": [
         "亮点句必须能映射到具体漏洞、论点或证据。",
@@ -113,7 +117,7 @@ def skill_prompt(skill: dict[str, Any]) -> str:
 {chr(10).join(f'{index + 1}. {item}' for index, item in enumerate(skill['decision_steps']))}
 可用战术：
 {tactics}
-经验证经验：
+待按具体情境检验的经验（是否正式晋级见版本评测记录）：
 {lessons}
 禁止模式：
 {chr(10).join(f'- {item}' for item in skill['anti_patterns'])}
@@ -133,7 +137,7 @@ def render_skill_markdown(skill: dict[str, Any], metrics: dict[str, Any] | None 
     ]
     for tactic in skill["tactics"]:
         lines += [f"### {tactic['name']}", "", f"- 触发：{tactic['when']}", f"- 动作：{tactic['action']}", f"- 风险：{tactic['risk']}", ""]
-    lines += ["## 经验证经验", ""]
+    lines += ["## 归纳经验（验证状态见评测记录）", ""]
     if skill["lessons"]:
         for index, lesson in enumerate(skill["lessons"], 1):
             lines += [f"### 经验 {index}", "", f"- 触发：{lesson['trigger']}", f"- 动作：{lesson['action']}", f"- 原因：{lesson['rationale']}", f"- 证据：{lesson['evidence']}", f"- 置信度：{lesson['confidence']:.0%}", ""]
