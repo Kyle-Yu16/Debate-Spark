@@ -3,19 +3,19 @@ language: zh-CN
 stages:
   - name: 立论
     turns_per_side: 1
-    max_chars: 900
+    max_chars: 210
     questions_allowed: false
   - name: 攻辩
     turns_per_side: 2
-    max_chars: 450
+    max_chars: 150
     questions_allowed: true
   - name: 自由辩论
     turns_per_side: 4
-    max_chars: 350
+    max_chars: 170
     questions_allowed: true
   - name: 总结
     turns_per_side: 1
-    max_chars: 800
+    max_chars: 210
     questions_allowed: false
 scoring:
   persuasion: 0.30
@@ -23,4 +23,3 @@ scoring:
   logic: 0.20
   evidence: 0.20
   insight: 0.10
-

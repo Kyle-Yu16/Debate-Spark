@@ -8,6 +8,7 @@ from typing import Any
 from .llm import llm
 from .research import search_web
 from .strategy_skill import normalize_skill, skill_prompt
+from .topic_playbooks import topic_playbook_prompt
 
 
 def other(stance: str) -> str:
@@ -231,6 +232,20 @@ LENSES = [
     "二阶影响",
     "可证伪性",
 ]
+
+STAGE_SPEECH_LIMITS = {
+    "立论": (120, 180),
+    "攻辩": (80, 130),
+    "自由辩论": (90, 150),
+    "总结": (120, 180),
+}
+
+STAGE_SPEECH_HARD_LIMITS = {
+    "立论": 210,
+    "攻辩": 150,
+    "自由辩论": 170,
+    "总结": 210,
+}
 COMMON_PHRASES = {
     "对方辩友",
     "创造力的",
@@ -486,6 +501,9 @@ async def generate_reply(
         and as_text(turn.get("meta", {}).get("target"))
     ]
     criterion = workspace["analysis"]["criterion"]
+    min_chars, max_chars = STAGE_SPEECH_LIMITS.get(stage, (100, 170))
+    hard_max_chars = STAGE_SPEECH_HARD_LIMITS.get(stage, 170)
+    featured_topic = topic_playbook_prompt(topic)
     strategy_text = (
         skill_prompt(strategy)
         if isinstance(strategy, dict)
@@ -497,26 +515,34 @@ async def generate_reply(
 
 当前阶段：{stage}；训练难度：{difficulty}。
 {strategy_text}
+{featured_topic}
 可选观察视角：{lens}，仅在有助于回应时采用，不要求轮换视角或战术。已经讨论的对象：{covered or '无'}。
 本方多次使用的词组：{repeated_phrases or '无'}。这些只是重复风险提示，不是禁词。允许继续讨论同一例子或问题，但必须回答新质疑、补充原因、条件或后果；不要复述旧论证，也不要为了换例子丢掉尚未回答的关键问题。
+若同一人物、故事或具体情境已占据多轮，且对方最新问题不必依赖它也能回答，应回到一般机制或换用结构不同的边界情形检验结论。这是防止范围窄化，不是为求新而强制换例子。
 对方最新发言：{user_text}\n此前记录：\n{history or '无'}
 冻结证据卡：{evidence}
 【本轮回应要求，优先于 Skill 中的求新建议】
-先准确、简短地回应对方最新发言里最影响结论的质疑，再给本方理由。对方没有发言时直接立论，不要虚构对方观点。不强行给对方扣逻辑谬误的帽子，也不要只要求对方举证而不给自己的判断。
+先准确、简短地回应对方最新发言里最影响结论的一个质疑，再给本方理由。除立论和总结外，结尾提出一个能迫使对方补足因果或比较的短问题。不要同时铺开多个次要攻击点，也不要重述已经说清的背景。对方没有发言时直接立论，不要虚构对方观点。不强行给对方扣逻辑谬误的帽子，也不要只要求对方举证而不给自己的判断。
 把抽象判断讲成人能理解的因果关系：谁面临什么选择，受到什么限制，选择后会有什么具体变化。适合时用贴近生活的情境说明，假设必须明确说“假设”或“例如”，不能伪装成调查或真实个案，不能用一个故事证明所有人。若继续原情境能答清问题，就不要另起故事。
 只说“机会成本”不够，要讲清楚为此放弃了什么；只说“净效应未闭合”不够，要讲清哪一项收益或代价还没比较。不要堆砌“同资源、可迁移、判准、净增量”等词。定义澄清应简短，随后回到实际选择的差异，不能靠扩大定义把对方收益全算成本方收益。
 总结围绕已经发生的主要交锋收束。没有可靠证据时使用审慎措辞，evidence_ids 只能引用冻结证据卡的 ID。
-输出 JSON：speech(180-320字中文发言), target(对方的具体主张或问题), tactic, issue(没有明确漏洞可写无), explanation(简明策略说明，不输出隐藏推理), evidence_ids(数组), spark(可为空；只能摘录 speech 中已经完成论证的一句话，不另造金句), lens(实际视角), topic_link(如何回答原始辩题), new_ground(本轮新增的回答、理由或适用条件), used_example(具体情境；没有则为空字符串)。"""
+发言以{min_chars}-{max_chars}个中文字符为目标，且不得超过{hard_max_chars}字。通常用3-4个自然完整的句子：直接回答、一条因果理由、一个追问。不得为压缩字数省略必要主谓宾或把多层逻辑硬塞进一句。允许少于下限，前提是回应、理由和追问已经说清。
+输出 JSON：speech(中文发言), target(对方的具体主张或问题), tactic, issue(没有明确漏洞可写无), explanation(简明策略说明，不输出隐藏推理), evidence_ids(数组), spark(可为空；只能摘录 speech 中已经完成论证的一句话，不另造金句), lens(实际视角), topic_link(如何回答原始辩题), new_ground(本轮新增的回答、理由或适用条件), used_example(具体情境；没有则为空字符串)。"""
     try:
         result = normalize_reply(await llm.json(prompt, temperature=0.72), lens, topic)
         similarity = similarity_to_history(result["speech"], transcript, ai_stance)
-        needs_rewrite = similarity >= 0.52 or not result["new_ground"]
+        over_limit = len(result["speech"]) > hard_max_chars
+        needs_rewrite = similarity >= 0.52 or not result["new_ground"] or over_limit
         if needs_rewrite:
-            audit = f"初稿与本方历史相似度{similarity:.0%}；新增内容说明{result['new_ground'] or '缺失'}"
+            audit = (
+                f"初稿与本方历史相似度{similarity:.0%}；"
+                f"新增内容说明{result['new_ground'] or '缺失'}；"
+                f"长度{len(result['speech'])}字（硬上限{hard_max_chars}字）"
+            )
             rewrite_prompt = f"""{prompt}
 
 你刚才的初稿需要修订：{audit}。
-先保留对方尚未获答的核心问题，再补上缺少的回答、原因、适用条件或实际后果。不要只换措辞，也不要为躲避重复而转移争点。
+先保留对方尚未获答的核心问题，再补上缺少的回答、原因、适用条件或实际后果。若超长，删去次要分支和重复背景，不得截断句子或省略逻辑连接。不要只换措辞，也不要为躲避重复而转移争点。
 待废弃初稿：{json.dumps(result, ensure_ascii=False)}"""
             result = normalize_reply(
                 await llm.json(rewrite_prompt, temperature=0.65), lens, topic

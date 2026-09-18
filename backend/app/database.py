@@ -83,7 +83,12 @@ def init_db() -> None:
         baseline = db.execute(
             "SELECT config FROM strategies WHERE id='baseline-v1'"
         ).fetchone()
-        if baseline and "invariants" not in decode(baseline["config"], {}):
+        baseline_config = decode(baseline["config"], {}) if baseline else {}
+        if baseline and (
+            "invariants" not in baseline_config
+            or int(baseline_config.get("schema_version", 0))
+            < int(DEFAULT_SKILL.get("schema_version", 1))
+        ):
             db.execute(
                 "UPDATE strategies SET config=?, metrics=? WHERE id='baseline-v1'",
                 (
