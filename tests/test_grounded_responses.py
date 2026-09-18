@@ -28,6 +28,55 @@ def test_shared_terms_do_not_force_a_new_topic_or_extra_request(monkeypatch):
     assert "不能用一个故事证明所有人" in calls[0]
 
 
+def test_spoken_reply_expands_evidence_ids_and_drops_command_templates(monkeypatch):
+    calls = []
+
+    async def respond(prompt, **kwargs):
+        calls.append(prompt)
+        return {
+            "speech": "S1显示六成受访者遇到争议。请比较完成速度与长期能力，哪一个更重要？",
+            "target": "把完成速度等同于学习收益",
+            "tactic": "证据反驳",
+            "issue": "评价维度缺失",
+            "explanation": "补足来源并比较长期影响。",
+            "evidence_ids": ["ev-1"],
+            "spark": "",
+            "lens": "时间尺度",
+            "topic_link": "比较AI作业的长期利弊",
+            "new_ground": "区分短期完成与长期能力",
+            "used_example": "",
+        }
+
+    monkeypatch.setattr(agents.llm, "json", respond)
+    topic = "大学生借助AI工具完成作业是否利大于弊"
+    workspace = agents.demo_workspace(
+        topic,
+        "反方",
+        [
+            {
+                "title": "大学生AI使用调查",
+                "url": "https://example.edu/report",
+                "domain": "某高校研究中心",
+                "snippet": "调查显示部分学生面临学术争议。",
+            }
+        ],
+    )
+    workspace["evidence"][0]["date"] = "2025年"
+    result = asyncio.run(
+        agents.generate_reply(
+            topic, "反方", workspace, [], "AI让作业完成得更快。", "自由辩论", "赛事"
+        )
+    )
+
+    assert len(calls) == 1
+    assert "S1" not in result["speech"]
+    assert "请比较" not in result["speech"]
+    assert "某高校研究中心" in result["speech"]
+    assert "大学生AI使用调查" in result["speech"]
+    assert "禁止使用“请回答”" in calls[0]
+    assert "speech 中绝不能出现 S1" in calls[0]
+
+
 def test_learning_keeps_opponents_challenge_and_own_response_together():
     row = {
         "candidate_stance": "反方", "outcome": "failure",

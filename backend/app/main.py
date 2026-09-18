@@ -414,7 +414,7 @@ def create_debate(body: DebateCreate):
     state = {
         "round": 0,
         "rounds": body.rounds,
-        "stage": "立论",
+        "stage": "自由辩论" if body.mode == "human" else "立论",
         "pending": [],
         "focus": project["workspace"].get("analysis", {}).get("conflicts", [])[:3],
     }
@@ -468,7 +468,8 @@ async def submit_turn(debate_id: str, body: TurnCreate):
     if debate["mode"] != "human":
         raise HTTPException(409, "机器竞技场使用流式接口")
     project = get_project(debate["project_id"])
-    human = add_turn(debate_id, "用户", debate["user_stance"], body.stage, body.content)
+    stage = "自由辩论"
+    human = add_turn(debate_id, "用户", debate["user_stance"], stage, body.content)
     history = get_turns(debate_id)
     from .agents import generate_reply
 
@@ -479,7 +480,7 @@ async def submit_turn(debate_id: str, body: TurnCreate):
         project["workspace"],
         history,
         body.content,
-        body.stage,
+        stage,
         debate["difficulty"],
         strategy,
     )
@@ -487,7 +488,7 @@ async def submit_turn(debate_id: str, body: TurnCreate):
         debate_id,
         "AI 辩手",
         other(debate["user_stance"]),
-        body.stage,
+        stage,
         result["speech"],
         result,
     )
@@ -495,7 +496,7 @@ async def submit_turn(debate_id: str, body: TurnCreate):
     state.update(
         {
             "round": state.get("round", 0) + 1,
-            "stage": body.stage,
+            "stage": stage,
             "pending": [result.get("target", "")],
             "last_issue": result.get("issue", ""),
             "last_lens": result.get("lens", ""),

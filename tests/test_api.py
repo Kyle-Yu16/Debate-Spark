@@ -19,6 +19,7 @@ def make_client():
 
 def test_health_and_project_flow(monkeypatch):
     client = make_client()
+    reply_stages = []
     fake_workspace = {
         "topic": "人工智能是否让教育更公平", "stance": "正方",
         "analysis": {"keywords": ["公平"], "definitions": [], "conflicts": ["效率与公平"], "criterion": "机会改善", "burdens": {"正方": "证明改善", "反方": "证明恶化"}},
@@ -29,7 +30,12 @@ def test_health_and_project_flow(monkeypatch):
     async def fake_prepare(topic, stance):
         return {**fake_workspace, "topic": topic, "stance": stance}
 
+    async def fake_reply(topic, ai_stance, workspace, transcript, user_text, stage, difficulty, strategy):
+        reply_stages.append(stage)
+        return {"speech": "效率不等于公平，关键仍是资源差距是否缩小。", "target": user_text, "issue": "比较缺失"}
+
     monkeypatch.setattr(main, "prepare_workspace", fake_prepare)
+    monkeypatch.setattr(agents, "generate_reply", fake_reply)
     with client:
         health = client.get("/api/health")
         assert health.status_code == 200
@@ -43,6 +49,15 @@ def test_health_and_project_flow(monkeypatch):
         assert "测试立论" in exported.text
         debate = client.post("/api/debates", json={"project_id": project_id, "mode": "human", "user_stance": "正方", "difficulty": "标准"})
         assert debate.status_code == 200
+        assert debate.json()["state"]["stage"] == "自由辩论"
+        turn = client.post(
+            f"/api/debates/{debate.json()['id']}/turns",
+            json={"content": "AI扩大了教育资源覆盖。", "stage": "立论"},
+        )
+        assert turn.status_code == 200
+        assert turn.json()["user_turn"]["stage"] == "自由辩论"
+        assert turn.json()["ai_turn"]["stage"] == "自由辩论"
+        assert reply_stages == ["自由辩论"]
 
 
 def test_project_validation():

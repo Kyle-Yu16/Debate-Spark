@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Archive, ArrowRight, BookOpen, BrainCircuit, ChevronRight, CirclePause, CirclePlay, Download, Flame, Github, GitBranch, History as HistoryIcon, Home, Lightbulb, LoaderCircle, Lock, MessageSquareQuote, Plus, RefreshCw, Scale, Search, Sparkles, Swords, Trophy, Unlock, Users, Wifi, WifiOff, X, Trash2 } from 'lucide-react'
 import { api } from './api'
 import type { Debate, DebateHistory, Evaluation, Project, ProjectHistory, Stance, Turn, Workspace } from './types'
+import './human-debate.css'
 
 type View='home'|'workspace'|'human'|'arena'
 type ResumeTarget={id:string;mode:'human'|'arena'}|null
-const stages=['立论','攻辩','自由辩论','总结']
+const FREE_DEBATE_STAGE='自由辩论'
 const textValue=(value:unknown):string=>{
   if(value==null)return ''
   if(typeof value==='string'||typeof value==='number'||typeof value==='boolean')return String(value)
@@ -52,7 +53,19 @@ function App(){
       {busy&&<div className="loading-overlay"><LoaderCircle className="spin"/><span>正在编排 Agent…</span></div>}
       {view==='home'&&<HomeView projects={projects} onCreated={async p=>{await loadProjects();await open(p)}} onOpen={open} onDelete={async p=>{try{await api.deleteProject(p.id);await loadProjects()}catch(e:any){setError(e.message)}}}/>}
       {view==='workspace'&&project&&<WorkspaceView project={project} workspace={workspace} setWorkspace={setWorkspace} onPrepared={w=>{setWorkspace(w);setProject({...project,workspace:w,status:'ready'});loadProjects()}} setBusy={setBusy} setError={setError}/>}
-      {view==='human'&&project&&workspace&&<HumanDebate project={project} workspace={workspace} resumeTarget={resumeTarget} onClearResume={()=>setResumeTarget(null)} onResume={openHistoryDebate} setError={setError}/>}
+      {view==='human'&&project&&workspace&&(
+        <HumanDebate
+          key={project.id}
+          project={project}
+          workspace={workspace}
+          projects={projects.filter(p=>p.status==='ready')}
+          onSwitchProject={id=>{const next=projects.find(p=>p.id===id);if(next)void open(next,'human')}}
+          resumeTarget={resumeTarget}
+          onClearResume={()=>setResumeTarget(null)}
+          onResume={openHistoryDebate}
+          setError={setError}
+        />
+      )}
       {view==='arena'&&project&&workspace&&<Arena project={project} workspace={workspace} resumeTarget={resumeTarget} onClearResume={()=>setResumeTarget(null)} onResume={openHistoryDebate} setError={setError}/>}
     </main>
   </div>
@@ -129,17 +142,55 @@ function MatrixView({workspace}:{workspace:Workspace}){return <div className="ma
 function InsightsView({workspace}:{workspace:Workspace}){return <div className="insight-list">{workspace.insights.map((x,i)=><article key={i}><div className="score">{Math.round((Number(x.score)||0)*100)}<small>/100</small></div><div><span>{textValue(x.lens)}</span><h3>{textValue(x.idea)}</h3><p>{textValue(x.support)}</p></div></article>)}</div>}
 function DraftsView({workspace,edit}:{workspace:Workspace;edit:(k:string,v:string)=>void}){return <div className="drafts">{Object.entries(workspace.drafts).map(([k,v])=><section className="draft-card" key={k}><div><span className="draft-stage">{k}</span><small>{Array.isArray(v)?`${v.length} 组弹药`:`${String(v).length} 字`}</small></div><textarea value={Array.isArray(v)?v.join('\n'):v} onChange={e=>edit(k,e.target.value)}/></section>)}</div>}
 
-function HumanDebate({project,workspace,resumeTarget,onClearResume,onResume,setError}:{project:Project;workspace:Workspace;resumeTarget:ResumeTarget;onClearResume:()=>void;onResume:(debate:DebateHistory)=>void;setError:(x:string)=>void}){
-  const [debate,setDebate]=useState<Debate|null>(null),[difficulty,setDifficulty]=useState('标准'),[stage,setStage]=useState('自由辩论'),[text,setText]=useState(''),[turns,setTurns]=useState<Turn[]>([]),[sending,setSending]=useState(false),[pendingTurn,setPendingTurn]=useState<Turn|null>(null),[evaluation,setEvaluation]=useState<Evaluation|null>(null),[showEval,setShowEval]=useState(false),[liveFinished,setLiveFinished]=useState(false),[history,setHistory]=useState<ProjectHistory|null>(null)
-  useEffect(()=>{let active=true;if(!resumeTarget||resumeTarget.mode!=='human')return;api.debate(resumeTarget.id).then((loaded:Debate)=>{if(!active)return;setDebate(loaded);setTurns(loaded.turns||[]);setDifficulty(loaded.difficulty);setStage(loaded.state?.stage||'自由辩论');setEvaluation(loaded.evaluation||null);setShowEval(false);setLiveFinished(false);setPendingTurn(null)}).catch((e:any)=>setError(e.message));return()=>{active=false}},[resumeTarget])
+function HumanDebate({project,workspace,projects,onSwitchProject,resumeTarget,onClearResume,onResume,setError}:{project:Project;workspace:Workspace;projects:Project[];onSwitchProject:(id:string)=>void;resumeTarget:ResumeTarget;onClearResume:()=>void;onResume:(debate:DebateHistory)=>void;setError:(x:string)=>void}){
+  const [debate,setDebate]=useState<Debate|null>(null)
+  const [difficulty,setDifficulty]=useState('标准')
+  const [userStance,setUserStance]=useState<Stance>(project.stance)
+  const [text,setText]=useState('')
+  const [turns,setTurns]=useState<Turn[]>([])
+  const [sending,setSending]=useState(false)
+  const [pendingTurn,setPendingTurn]=useState<Turn|null>(null)
+  const [evaluation,setEvaluation]=useState<Evaluation|null>(null)
+  const [showEval,setShowEval]=useState(false)
+  const [liveFinished,setLiveFinished]=useState(false)
+  const [history,setHistory]=useState<ProjectHistory|null>(null)
+
+  useEffect(()=>{let active=true;if(!resumeTarget||resumeTarget.mode!=='human')return;api.debate(resumeTarget.id).then((loaded:Debate)=>{if(!active)return;setDebate(loaded);setTurns(loaded.turns||[]);setDifficulty(loaded.difficulty);setUserStance(loaded.user_stance);setEvaluation(loaded.evaluation||null);setShowEval(false);setLiveFinished(false);setPendingTurn(null)}).catch((e:any)=>setError(e.message));return()=>{active=false}},[resumeTarget,setError])
   useEffect(()=>{if(debate)return;let active=true;api.history(project.id).then((h:ProjectHistory)=>{if(active)setHistory(h)}).catch((e:any)=>setError(e.message));return()=>{active=false}},[debate,project.id,setError])
-  const start=async()=>{onClearResume();try{const d=await api.createDebate({project_id:project.id,mode:'human',user_stance:project.stance,difficulty,rounds:8});setDebate(d);setTurns([]);setEvaluation(null);setShowEval(false);setLiveFinished(false)}catch(e:any){setError(e.message)}}
-  const deleteHistory=async(debate:DebateHistory)=>{try{await api.deleteDebate(debate.id);setHistory(await api.history(project.id))}catch(e:any){setError(e.message)}}
-  const send=async()=>{if(!debate||!text.trim()||sending)return;const content=text.trim();const optimistic:Turn={id:`pending-${Date.now()}`,speaker:'用户',stance:project.stance,stage,content,meta:{},created_at:new Date().toISOString()};setPendingTurn(optimistic);setText('');setSending(true);try{const r=await api.turn(debate.id,{content,stage});setTurns(x=>[...x,r.user_turn,r.ai_turn]);setPendingTurn(null)}catch(e:any){setPendingTurn(null);setText(content);setError(`发送未完成：${e.message}`)}finally{setSending(false)}}
+
+  const begin=async(stance:Stance=userStance)=>{onClearResume();setSending(true);try{const d=await api.createDebate({project_id:project.id,mode:'human',user_stance:stance,difficulty,rounds:8});setDebate(d);setTurns([]);setText('');setPendingTurn(null);setEvaluation(null);setShowEval(false);setLiveFinished(false);return true}catch(e:any){setError(e.message);return false}finally{setSending(false)}}
+  const switchStance=async(next:Stance)=>{if(next===userStance||sending)return;const previous=userStance;setUserStance(next);if(debate&&!(await begin(next)))setUserStance(previous)}
+  const switchTopic=(id:string)=>{if(id===project.id||sending)return;onClearResume();onSwitchProject(id)}
+  const deleteHistory=async(item:DebateHistory)=>{try{await api.deleteDebate(item.id);setHistory(await api.history(project.id))}catch(e:any){setError(e.message)}}
+  const send=async()=>{if(!debate||!text.trim()||sending)return;const content=text.trim();const optimistic:Turn={id:`pending-${Date.now()}`,speaker:'用户',stance:userStance,stage:FREE_DEBATE_STAGE,content,meta:{},created_at:new Date().toISOString()};setPendingTurn(optimistic);setText('');setSending(true);try{const r=await api.turn(debate.id,{content,stage:FREE_DEBATE_STAGE});setTurns(x=>[...x,r.user_turn,r.ai_turn]);setPendingTurn(null)}catch(e:any){setPendingTurn(null);setText(content);setError(`发送未完成：${e.message}`)}finally{setSending(false)}}
   const finish=async()=>{if(!debate||sending)return;setSending(true);try{setEvaluation(await api.finish(debate.id));setShowEval(true);setLiveFinished(true)}catch(e:any){setError(e.message)}finally{setSending(false)}}
-  if(!debate)return <ModeStart icon={<Swords/>} eyebrow="HUMAN VS AGENT" title="把赛场交给真正的交锋" desc="选择训练强度。AI 会针对你刚刚说的内容回应，而不是机械背稿。"><div className="difficulty">{['陪练','标准','赛事'].map(d=><button key={d} className={difficulty===d?'selected':''} onClick={()=>setDifficulty(d)}><b>{d}</b><small>{d==='陪练'?'适度提示遗漏':d==='标准'?'完整正常攻防':'严格规则与计时'}</small></button>)}</div><button className="primary big" onClick={start}>进入辩论室 <ArrowRight/></button><div className="mode-history"><DebateHistory debates={(history?.debates||[]).filter(d=>d.mode==='human')} onOpen={onResume} onDelete={deleteHistory} empty="还没有人机对辩记录，完成第一场后可以在这里继续复盘。"/></div></ModeStart>
+  const setup=<DebateSetup project={project} projects={projects} userStance={userStance} disabled={sending} active={!!debate} onTopic={switchTopic} onStance={switchStance}/>
+
+  if(!debate)return <ModeStart icon={<Swords/>} eyebrow="HUMAN VS AGENT" title="把赛场交给真正的交锋" desc="选择辩题、持方和训练强度。进入后直接进行自由辩论。">{setup}<div className="difficulty">{['陪练','标准','赛事'].map(d=><button key={d} className={difficulty===d?'selected':''} onClick={()=>setDifficulty(d)}><b>{d}</b><small>{d==='陪练'?'适度提示遗漏':d==='标准'?'完整正常攻防':'严格规则与计时'}</small></button>)}</div><button className="primary big" disabled={sending} onClick={()=>begin()}>{sending?<LoaderCircle className="spin"/>:<ArrowRight/>}{sending?'正在进入':'进入自由辩论'}</button><div className="mode-history"><DebateHistory debates={(history?.debates||[]).filter(d=>d.mode==='human')} onOpen={onResume} onDelete={deleteHistory} empty="还没有人机对辩记录，完成第一场后可以在这里继续复盘。"/></div></ModeStart>
   if(showEval&&evaluation)return <EvaluationView evaluation={evaluation} backLabel={liveFinished?'再来一场':'返回对话'} onBack={()=>{if(liveFinished){onClearResume();setDebate(null);setEvaluation(null);setShowEval(false)}else{setShowEval(false)}}}/>
-  return <div className="debate-layout"><header className="debate-header"><div><span className="live-dot"/> 人机对辩 · {difficulty}</div><h2>{project.topic}</h2>{evaluation?<button className="secondary" onClick={()=>setShowEval(true)}><Trophy/>查看复盘</button>:<button className="secondary" onClick={finish} disabled={sending}>结束并复盘</button>}</header><div className="stage-bar">{stages.map(s=><button disabled={sending} className={stage===s?'active':''} onClick={()=>setStage(s)} key={s}>{s}</button>)}</div><div className="conversation">{turns.length===0&&!pendingTurn&&<div className="conversation-empty"><MessageSquareQuote/><h3>请发表你的第一轮观点</h3><p>你持{project.stance}，AI 持{project.stance==='正方'?'反方':'正方'}。</p></div>}{turns.map(t=><TurnBubble key={t.id} turn={t} userStance={project.stance}/>)}{pendingTurn&&<TurnBubble turn={pendingTurn} userStance={project.stance}/>} {sending&&<div className="agent-thinking"><span className="thinking-avatar">AI</span><div><b>对方 Agent 正在思考</b><small>正在梳理你的论证、核对证据并选择最值得回应的争点</small><span className="thinking-dots"><i/><i/><i/></span></div></div>}</div><div className="composer"><textarea disabled={sending||!!evaluation} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey))send()}} placeholder={evaluation?'本场对辩已结束，可查看复盘。':sending?'已发送，对方 Agent 正在思考…':`以${project.stance}身份发言…（Ctrl/⌘ + Enter 发送）`}/><div><span>{sending?'已发送，等待对方回应…':evaluation?'已结束':`${text.length} 字`}</span><button className={`primary ${sending?'thinking-button':''}`} onClick={send} disabled={!text.trim()||sending||!!evaluation}>{sending?<><LoaderCircle className="spin"/><span>思考中</span></>:<ArrowRight/>}</button></div></div><DebateSidebar workspace={workspace} turns={turns}/></div>
+  return <div className="debate-layout"><header className="debate-header"><div><span className="live-dot"/> 人机对辩 · {difficulty}</div><h2>{project.topic}</h2>{evaluation?<button className="secondary" onClick={()=>setShowEval(true)}><Trophy/>查看复盘</button>:<button className="secondary" onClick={finish} disabled={sending}>结束并复盘</button>}</header>{setup}<div className="conversation">{turns.length===0&&!pendingTurn&&<div className="conversation-empty"><MessageSquareQuote/><h3>发表你的第一轮观点</h3><p>你持{userStance}，AI 持{userStance==='正方'?'反方':'正方'}。</p></div>}{turns.map(t=><TurnBubble key={t.id} turn={t} userStance={userStance}/>)}{pendingTurn&&<TurnBubble turn={pendingTurn} userStance={userStance}/>} {sending&&<div className="agent-thinking"><span className="thinking-avatar">AI</span><div><b>对方 Agent 正在思考</b><small>正在梳理你的论证、核对证据并选择最值得回应的争点</small><span className="thinking-dots"><i/><i/><i/></span></div></div>}</div><div className="composer"><textarea disabled={sending||!!evaluation} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey))send()}} placeholder={evaluation?'本场对辩已结束，可查看复盘。':sending?'已发送，对方 Agent 正在思考…':`以${userStance}身份发言…（Ctrl/⌘ + Enter 发送）`}/><div><span>{sending?'已发送，等待对方回应…':evaluation?'已结束':`${text.length} 字`}</span><button className={`primary ${sending?'thinking-button':''}`} onClick={send} disabled={!text.trim()||sending||!!evaluation}>{sending?<><LoaderCircle className="spin"/><span>思考中</span></>:<ArrowRight/>}</button></div></div><DebateSidebar workspace={workspace} turns={turns}/></div>
+}
+
+function DebateSetup({project,projects,userStance,disabled,active,onTopic,onStance}:{project:Project;projects:Project[];userStance:Stance;disabled:boolean;active:boolean;onTopic:(id:string)=>void;onStance:(stance:Stance)=>void}){
+  const options=projects.some(item=>item.id===project.id)?projects:[project,...projects]
+  return <section className={`debate-setup ${active?'compact':''}`}>
+    <div className="topic-control">
+      <div className="setup-label"><span className="setup-index">01</span><span>辩题</span></div>
+      <label className="topic-select">
+        <Scale aria-hidden="true"/>
+        <select aria-label="切换辩题" value={project.id} disabled={disabled} onChange={e=>onTopic(e.target.value)}>{options.map(item=><option key={item.id} value={item.id}>{item.topic}</option>)}</select>
+        <ChevronRight aria-hidden="true"/>
+      </label>
+    </div>
+    <div className="quick-stance">
+      <div className="setup-label"><span className="setup-index">02</span><span>我的持方</span></div>
+      <div className="stance-choice">
+        <button disabled={disabled} className={userStance==='正方'?'selected pro':''} onClick={()=>onStance('正方')}><i/>正方</button>
+        <button disabled={disabled} className={userStance==='反方'?'selected con':''} onClick={()=>onStance('反方')}><i/>反方</button>
+      </div>
+    </div>
+    {active&&<p className="setup-note"><span/>切换辩题或持方将开启新一场，当前记录会保留。</p>}
+  </section>
 }
 function TurnBubble({turn,userStance}:{turn:Turn;userStance:Stance}){const mine=turn.stance===userStance;return <article className={`turn ${mine?'mine':'theirs'}`}><div className="turn-meta"><span>{turn.stance}</span><b>{turn.speaker}</b><small>{turn.stage}</small></div><p>{turn.content}</p>{turn.meta?.spark&&<blockquote><Flame/>{turn.meta.spark}</blockquote>}{turn.meta?.explanation&&<details><summary>为什么这样回应？</summary><p><b>回应策略：</b>{turn.meta.explanation}</p>{turn.meta?.lens&&<p><b>本轮视角：</b>{turn.meta.lens}</p>}{turn.meta?.topic_link&&<p><b>回扣原题：</b>{turn.meta.topic_link}</p>}{turn.meta?.new_ground&&<p><b>新增内容：</b>{turn.meta.new_ground}</p>}</details>}</article>}
 function DebateSidebar({workspace,turns}:{workspace:Workspace;turns:Turn[]}){return <aside className="debate-side"><span className="kicker">LIVE CONTEXT</span><h3>当前争点</h3>{workspace.analysis.conflicts.map((x,i)=><div className="focus" key={`${i}-${textValue(x)}`}><i/>{textValue(x)}</div>)}<h3>已公开证据</h3><p className="muted">{turns.some(t=>t.meta?.evidence_ids?.length)?'本轮已有证据卡被调用':'尚未调用证据卡'}</p><h3>训练提醒</h3><p>回应对方最强的论点，比攻击最弱的措辞更有价值。</p></aside>}

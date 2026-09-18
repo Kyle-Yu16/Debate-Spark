@@ -323,6 +323,81 @@ def normalize_reply(raw: Any, lens: str, topic: str) -> dict[str, Any]:
     }
 
 
+def naturalize_challenge_language(speech: str) -> str:
+    """Remove host-like commands while preserving the underlying challenge."""
+    text = speech
+    replacements = (
+        (r"请(?:你|对方(?:辩友)?)?(?:正面)?回答(?:一下)?[：:，,、\s]*", ""),
+        (r"请(?:你|对方(?:辩友)?)?比较(?:一下)?", "真正需要比较的是"),
+        (r"请(?:你|对方(?:辩友)?)?说明(?:一下)?", "问题在于"),
+        (r"请(?:你|对方(?:辩友)?)?解释(?:一下)?", "问题在于"),
+        (r"请(?:你|对方(?:辩友)?)?证明(?:一下)?", "对方仍需证明"),
+        (r"请问(?:对方(?:辩友)?)?[：:，,、\s]*", ""),
+    )
+    for pattern, replacement in replacements:
+        text = re.sub(pattern, replacement, text)
+    return re.sub(r"([。！？])\s+", r"\1", text).strip(" ，,")
+
+
+def spoken_evidence_source(card: dict[str, Any]) -> str:
+    domain = as_text(card.get("domain"))
+    title = as_text(card.get("title"))
+    date = as_text(card.get("date"))
+    if date in {"待核验", "未知", "无"}:
+        date = ""
+    if domain and title:
+        return f"{domain}{date + '发布的' if date else '的'}《{title}》"
+    if title:
+        return f"{date + '发布的' if date else ''}《{title}》"
+    return f"{domain}{date + '发布的材料' if date else '的材料'}" if domain else "备赛阶段核验的材料"
+
+
+def expand_internal_evidence_refs(speech: str, evidence: list[dict]) -> str:
+    """Keep evidence IDs in metadata, never in spoken debate language."""
+    references: dict[str, str] = {}
+    for index, card in enumerate(evidence, start=1):
+        label = spoken_evidence_source(card)
+        card_id = as_text(card.get("id")).upper()
+        if card_id:
+            references[card_id] = label
+        references[f"S{index}"] = label
+        references[f"E{index}"] = label
+    if references:
+        keys = "|".join(re.escape(key) for key in sorted(references, key=len, reverse=True))
+        pattern = re.compile(
+            rf"(?<![A-Za-z0-9])(?:证据(?:卡)?\s*)?({keys})(?:\s*(显示|表明|指出|认为|证明|支持))?",
+            re.IGNORECASE,
+        )
+
+        def replace(match: re.Match[str]) -> str:
+            source = references.get(match.group(1).upper(), "备赛阶段核验的材料")
+            verb = match.group(2) or ""
+            return f"{source}{verb}"
+
+        speech = pattern.sub(replace, speech)
+        speech = re.sub(
+            r"证据卡\s*(\d+)",
+            lambda match: references.get(
+                f"S{match.group(1)}", "备赛阶段核验的材料"
+            ),
+            speech,
+            flags=re.IGNORECASE,
+        )
+    return re.sub(
+        r"(?<![A-Za-z0-9])(?:证据(?:卡)?\s*)?(?:[SE]\d+|ev-\d+)(?![A-Za-z0-9])",
+        "备赛阶段核验的材料",
+        speech,
+        flags=re.IGNORECASE,
+    )
+
+
+def finalize_debate_speech(result: dict[str, Any], evidence: list[dict]) -> dict[str, Any]:
+    result["speech"] = naturalize_challenge_language(
+        expand_internal_evidence_refs(result.get("speech", ""), evidence)
+    )
+    return result
+
+
 def demo_workspace(topic: str, stance: str, sources: list[dict]) -> dict[str, Any]:
     pro = f"支持“{topic}”的一方应证明：其整体收益在现实条件下高于成本。"
     con = f"反对“{topic}”的一方应指出：该判断忽略了关键代价、边界或替代方案。"
@@ -522,14 +597,17 @@ async def generate_reply(
 对方最新发言：{user_text}\n此前记录：\n{history or '无'}
 冻结证据卡：{evidence}
 【本轮回应要求，优先于 Skill 中的求新建议】
-先准确、简短地回应对方最新发言里最影响结论的一个质疑，再给本方理由。除立论和总结外，结尾提出一个能迫使对方补足因果或比较的短问题。不要同时铺开多个次要攻击点，也不要重述已经说清的背景。对方没有发言时直接立论，不要虚构对方观点。不强行给对方扣逻辑谬误的帽子，也不要只要求对方举证而不给自己的判断。
+先准确、简短地回应对方最新发言里最影响结论的一个质疑，再给本方理由。自由辩论可以自然抛出一个质疑，也可以用明确判断收束，不要求每轮都以问句结尾。禁止使用“请回答”“请比较”“请说明”“请证明”“请问对方”等主持人式或命令式模板；直接说出尚未成立的推理、缺失的比较，或自然提出问题。不要同时铺开多个次要攻击点，也不要重述已经说清的背景。对方没有发言时直接提出本方观点，不要虚构对方观点。不强行给对方扣逻辑谬误的帽子，也不要只要求对方举证而不给自己的判断。
 把抽象判断讲成人能理解的因果关系：谁面临什么选择，受到什么限制，选择后会有什么具体变化。适合时用贴近生活的情境说明，假设必须明确说“假设”或“例如”，不能伪装成调查或真实个案，不能用一个故事证明所有人。若继续原情境能答清问题，就不要另起故事。
 只说“机会成本”不够，要讲清楚为此放弃了什么；只说“净效应未闭合”不够，要讲清哪一项收益或代价还没比较。不要堆砌“同资源、可迁移、判准、净增量”等词。定义澄清应简短，随后回到实际选择的差异，不能靠扩大定义把对方收益全算成本方收益。
-总结围绕已经发生的主要交锋收束。没有可靠证据时使用审慎措辞，evidence_ids 只能引用冻结证据卡的 ID。
+总结围绕已经发生的主要交锋收束。没有可靠证据时使用审慎措辞。evidence_ids 只供系统记录，且只能引用冻结证据卡的 ID；speech 中绝不能出现 S1、E1、ev-1 或“证据卡1”这类内部编号。引用材料时，要在发言中自然说出来源主体或机构、材料内容，以及与当前论证有关的结论；时间和适用范围可用时也应交代，不能只报编号或笼统说“有研究表明”。
 发言以{min_chars}-{max_chars}个中文字符为目标，且不得超过{hard_max_chars}字。通常用3-4个自然完整的句子：直接回答、一条因果理由、一个追问。不得为压缩字数省略必要主谓宾或把多层逻辑硬塞进一句。允许少于下限，前提是回应、理由和追问已经说清。
 输出 JSON：speech(中文发言), target(对方的具体主张或问题), tactic, issue(没有明确漏洞可写无), explanation(简明策略说明，不输出隐藏推理), evidence_ids(数组), spark(可为空；只能摘录 speech 中已经完成论证的一句话，不另造金句), lens(实际视角), topic_link(如何回答原始辩题), new_ground(本轮新增的回答、理由或适用条件), used_example(具体情境；没有则为空字符串)。"""
     try:
-        result = normalize_reply(await llm.json(prompt, temperature=0.72), lens, topic)
+        result = finalize_debate_speech(
+            normalize_reply(await llm.json(prompt, temperature=0.72), lens, topic),
+            evidence,
+        )
         similarity = similarity_to_history(result["speech"], transcript, ai_stance)
         over_limit = len(result["speech"]) > hard_max_chars
         needs_rewrite = similarity >= 0.52 or not result["new_ground"] or over_limit
@@ -544,8 +622,11 @@ async def generate_reply(
 你刚才的初稿需要修订：{audit}。
 先保留对方尚未获答的核心问题，再补上缺少的回答、原因、适用条件或实际后果。若超长，删去次要分支和重复背景，不得截断句子或省略逻辑连接。不要只换措辞，也不要为躲避重复而转移争点。
 待废弃初稿：{json.dumps(result, ensure_ascii=False)}"""
-            result = normalize_reply(
-                await llm.json(rewrite_prompt, temperature=0.65), lens, topic
+            result = finalize_debate_speech(
+                normalize_reply(
+                    await llm.json(rewrite_prompt, temperature=0.65), lens, topic
+                ),
+                evidence,
             )
             similarity = similarity_to_history(result["speech"], transcript, ai_stance)
         result["novelty"] = round(max(0.0, 1.0 - similarity), 3)
@@ -555,7 +636,7 @@ async def generate_reply(
     except Exception:
         target = user_text[:60]
         return {
-            "speech": f"对方刚才强调“{target}”，但该子问题只有在能改变原题《{topic}》的结论时才重要。这里缺少了从现象到结论的关键一步：即便该现象存在，也不等于它足以决定本题。请回到“{criterion}”这一比较基线，说明它为何压倒其他成本；否则我们只是在讨论支线，而没有完成原题的举证。",
+            "speech": f"对方刚才强调“{target}”，但该子问题只有在能改变原题《{topic}》的结论时才重要。这里缺少了从现象到结论的关键一步：即便该现象存在，也不等于它足以决定本题。争点仍在“{criterion}”这一比较基线：这一影响为何足以压过其他成本？否则我们只是在讨论支线，而没有完成原题的举证。",
             "target": target,
             "tactic": "追问并争夺标准",
             "issue": "因果链或比较基线缺失",
