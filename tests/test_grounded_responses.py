@@ -77,6 +77,21 @@ def test_spoken_reply_expands_evidence_ids_and_drops_command_templates(monkeypat
     assert "speech 中绝不能出现 S1" in calls[0]
 
 
+def test_challenges_read_as_challenges_not_polite_requests():
+    normalizer = agents.naturalize_challenge_language
+    # The softer register is rewritten, not merely stripped of "请问".
+    assert normalizer("请问对方：知道会让哪个具体决策变差？") == "试问对方，知道会让哪个具体决策变差？"
+    assert normalizer("请问对方能不能给出一个具体例子？") == "试问对方，能拿出什么具体例子？"
+    assert normalizer("对方能否给出一个具体选择，知道结局后反而一定做得更差？") == (
+        "试问对方，能拿出什么具体选择，知道结局后反而一定做得更差？"
+    )
+    assert normalizer("请对方给出一个具体例子。") == "试问对方，能拿出什么具体例子。"
+    # A sentence that merely mentions 能否 is not a challenge and stays intact.
+    assert normalizer("这取决于对方能否给出证据。") == "这取决于对方能否给出证据。"
+    # Stacked rules must not emit the marker twice.
+    assert normalizer("请问对方，请问对方凭什么这么说？") == "试问对方，凭什么这么说？"
+
+
 def test_learning_keeps_opponents_challenge_and_own_response_together():
     row = {
         "candidate_stance": "反方", "outcome": "failure",
