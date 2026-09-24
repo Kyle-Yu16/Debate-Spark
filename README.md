@@ -13,7 +13,7 @@
 ![Local First](https://img.shields.io/badge/运行方式-Localhost-292A26)
 ![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)
 
-[📱 下载 Android APK](https://raw.githubusercontent.com/Kyle-Yu16/Debate-Spark/main/releases/DebateSpark-Android-v1.0.0.apk) · [快速开始](#-快速开始) · [功能介绍](#-核心功能) · [使用指南](#-使用指南) · [工作原理](#-工作原理) · [技术架构](#-技术架构)
+[📱 下载 Android APK](https://raw.githubusercontent.com/Kyle-Yu16/Debate-Spark/main/releases/DebateSpark-Android-v1.0.1.apk) · [快速开始](#-快速开始) · [功能介绍](#-核心功能) · [使用指南](#-使用指南) · [工作原理](#-工作原理) · [技术架构](#-技术架构)
 
 </div>
 
@@ -27,7 +27,7 @@
 
 ## 📱 Android 客户端
 
-可下载公测 APK：[观点火花 Android v1.0.0](https://raw.githubusercontent.com/Kyle-Yu16/Debate-Spark/main/releases/DebateSpark-Android-v1.0.0.apk) 。安装包大小约 16 MB，需 Android 8.0 及以上版本。
+可下载公测 APK：[观点火花 Android v1.0.1](https://raw.githubusercontent.com/Kyle-Yu16/Debate-Spark/main/releases/DebateSpark-Android-v1.0.1.apk) 。安装包大小约 11 MB，需 Android 8.0 及以上版本。
 
 移动端不依赖本项目的 Web 后端：用户在「模型连接」页面填写 **API Key、Base URL 与 Model** 后，即可直接使用任意 OpenAI-compatible Chat Completions API。包含本地辩题库、备赛简报、人机自由辩论与历史记录；这些数据全部留在手机本地。API Key 通过 Android Keystore 加密保存，不会写入本仓库、日志或网页后端。
 
